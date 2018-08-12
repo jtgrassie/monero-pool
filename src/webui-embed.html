@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: "Courier New", Courier, monospace;
+            }
+            header {
+                font-size: larger;
+                font-weight: bold;
+                padding-bottom: 1em;
+            }
+            .wallet {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <header>THE Monero Mining Pool</header>
+        <table>
+            <tr><td>Pool HR: </td><td>{{POOL_HASHRATE}}</td></tr>
+            <tr><td>Network HR: </td><td>{{NETWORK_HASHRATE}}</td></tr>
+            <tr><td>Blocks found: </td><td>{{POOL_BLOCKS_FOUND}}</td></tr>
+            <tr><td>Last block found: </td><td>{{LAST_BLOCK_FOUND}}</td></tr>
+            <tr><td>Payment threshold: </td><td>{{PAYMENT_THRESHOLD}}</td></tr>
+            <tr><td>Pool fee: </td><td>{{POOL_FEE}}</td></tr>
+            <tr><td>Miners connected: </td><td>{{MINERS_CONNECTED}}</td></tr>
+            <tr class="wallet"><td>Your HR: </td><td>{{MINER_HASHRATE}}</td></tr>
+            <tr class="wallet"><td>Balance due: </td><td>{{MINER_BALANCE_DUE}}</td></tr>
+        </table>
+        <form>
+            Your wallet address: <input type="text" id="wa" name="address" />
+            <input type="submit" value="Submit" />
+        </form>
+        <script>
+            var f = document.querySelector("form");            
+            var wa = document.querySelector("#wa");            
+            f.onsubmit = function(e)
+            {
+                e.preventDefault();
+                var d = new Date();
+                d.setTime(d.getTime() + (86400 * 365 * 1000));
+                document.cookie = "wa=" + wa.value + ";expires=" + d.toGMTString();
+                window.location.reload();
+                return false;
+            };
+            window.onload = function()
+            {
+                if (/wa=[0-9a-fA-F]+/.test(document.cookie))
+                {
+                    var wh = document.querySelectorAll(".wallet");
+                    wh.forEach(function(e)
+                    {
+                        e.style = "display: table-row;";
+                    });
+                    var c = document.cookie.split("=");
+                    wa.value = c[1];
+                }
+                setTimeout(function()
+                {
+                    window.location.reload(1);
+                }, 30000);
+            };
+        </script>
+    </body>
+</html>
