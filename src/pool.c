@@ -289,7 +289,7 @@ compare_block(const MDB_val *a, const MDB_val *b)
 {
     const block_t *va = (const block_t*) a->mv_data;
     const block_t *vb = (const block_t*) b->mv_data;
-    int sc = strcmp(va->hash, vb->hash);
+    int sc = memcmp(va->hash, vb->hash, 64);
     if (sc == 0)
         return (va->timestamp < vb->timestamp) ? -1 : va->timestamp > vb->timestamp;
     else
@@ -458,6 +458,8 @@ miner_hr(const char *address)
         if (strncmp(c->address, address, ADDRESS_MAX) == 0)
         {
             double d = difftime(time(NULL), c->connected_since);
+            if (d == 0.0)
+                break;
             hr = c->hashes / d;
             break;
         }
@@ -469,6 +471,8 @@ miner_hr(const char *address)
 uint64_t
 miner_balance(const char *address)
 {
+    if (strlen(address) > ADDRESS_MAX)
+        return 0;
     int rc;
     char *err;
     MDB_txn *txn;
@@ -573,7 +577,7 @@ process_blocks(block_t *blocks, size_t count)
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
                 continue;
             }
-            if (ib->hash == sb->hash && ib->prev_hash != sb->prev_hash)
+            if (memcmp(ib->hash, sb->hash, 64) == 0 && memcmp(ib->prev_hash, sb->prev_hash, 64) != 0)
             {
                 log_warn("Have a block with matching heights but differing parents! Setting orphaned.\n");
                 block_t bp;
