@@ -103,7 +103,9 @@ answer_to_connection (void *cls, struct MHD_Connection *connection,
 
     time_t now = time(NULL);
     double diff = difftime(now, context->pool_stats->last_block_found);
-    if (diff < 60)
+    if (context->pool_stats->last_block_found == 0)
+        snprintf(temp, TAG_MAX, "None yet");
+    else if (diff < 60)
         snprintf(temp, TAG_MAX, "%d seconds ago", (int) diff);
     else if (diff < 3600)
         snprintf(temp, TAG_MAX, "%d minutes ago", (int) diff / 60);
