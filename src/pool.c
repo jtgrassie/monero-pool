@@ -123,6 +123,7 @@ typedef struct config_t
     uint32_t pool_port;
     uint32_t log_level;
     uint32_t webui_port;
+    char log_file[MAX_PATH];
 } config_t;
 
 typedef struct block_template_t
@@ -267,6 +268,7 @@ static BN_CTX *bn_ctx;
 static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
 static pthread_mutex_t mutex_miner_hr = PTHREAD_MUTEX_INITIALIZER;
+static FILE *fd_log;
 
 int
 compare_uint64(const MDB_val *a, const MDB_val *b)
@@ -2120,7 +2122,7 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
 }
 
 static void
-read_config(const char *file)
+read_config(const char *config_file, const char *log_file)
 {
     /* Start with some defaults for any missing... */
     strncpy(config.rpc_host, "127.0.0.1", 10);
@@ -2134,29 +2136,29 @@ read_config(const char *file)
     config.log_level = 5;
     config.webui_port = 4243;
 
-    char config_file[MAX_PATH];
-    if (file)
+    char path[MAX_PATH];
+    if (config_file)
     {
-        strncpy(config_file, file, MAX_PATH);
+        strncpy(path, config_file, MAX_PATH);
     }
     else
     {
-        getcwd(config_file, MAX_PATH);
-        strcat(config_file, "/pool.conf");
-        if (access(config_file, R_OK) != 0)
+        getcwd(path, MAX_PATH);
+        strcat(path, "/pool.conf");
+        if (access(path, R_OK) != 0)
         {
-            strncpy(config_file, getenv("HOME"), MAX_PATH);
-            strcat(config_file, "/pool.conf");
-            if (access(config_file, R_OK) != 0)
+            strncpy(path, getenv("HOME"), MAX_PATH);
+            strcat(path, "/pool.conf");
+            if (access(path, R_OK) != 0)
             {
                 log_fatal("Cannot find a config file in ./ or ~/ and no option supplied. Aborting.");
                 abort();
             }
         }
     }
-    log_info("Reading config at: %s", config_file);
+    log_info("Reading config at: %s", path);
 
-    FILE *fp = fopen(config_file, "r");
+    FILE *fp = fopen(path, "r");
     if (fp == NULL)
     {
         log_fatal("Cannot open config file. Aborting.");
@@ -2227,8 +2229,15 @@ read_config(const char *file)
         {
             config.webui_port = atoi(val);
         }
+        else if (strcmp(key, "log-file") == 0)
+        {
+            strncpy(config.log_file, val, sizeof(config.log_file));
+        }
     }
     fclose(fp);
+
+    if (log_file != NULL)
+        strncpy(config.log_file, log_file, sizeof(config.log_file));
 
     if (!config.pool_wallet[0])
     {
@@ -2243,12 +2252,12 @@ read_config(const char *file)
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %d\n  rpc_timeout = %d\n  pool_wallet = %s\n  "
             "pool_start_diff = %d\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
             "wallet_rpc_host = %s\n  wallet_rpc_port = %d\n  pool_port = %d\n  "
-            "log_level = %d\n  webui_port=%d\n",
+            "log_level = %d\n  webui_port=%d\n  log-file = %s\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
             config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
-            config.log_level, config.webui_port);
+            config.log_level, config.webui_port, config.log_file);
 }
 
 static void
@@ -2326,6 +2335,8 @@ cleanup()
     BN_CTX_free(bn_ctx);
     pthread_mutex_destroy(&mutex_miner_hr);
     log_info("Pool shutdown successfully");
+    if (fd_log != NULL)
+        fclose(fd_log);
 }
 
 static void
@@ -2347,30 +2358,46 @@ int main(int argc, char **argv)
     static struct option options[] =
     {
         {"config-file", required_argument, 0, 'c'},
+        {"log-file", required_argument, 0, 'l'},
         {0, 0, 0, 0}
     };
-    bool config_read = false;
+    char *config_file = NULL;
+    char *log_file = NULL;
     int c;
     while (1)
     {
         int option_index = 0;
-        c = getopt_long (argc, argv, "abc:d:f:",
+        c = getopt_long (argc, argv, "c:l:",
                        options, &option_index);
         if (c == -1)
             break;
         switch (c)
         {
             case 'c':
-                read_config(optarg);
-                config_read = true;
+                config_file = strdup(optarg);
+                break;
+            case 'l':
+                log_file = strdup(optarg);
                 break;
         }
     }
-    if (!config_read)
-        read_config(NULL);
+    read_config(config_file, log_file);
 
     log_set_level(LOG_FATAL - config.log_level);
-    /* log_set_fp(stdout); */
+    if (config.log_file[0] != '\0')
+    {
+        fd_log = fopen(config.log_file, "a");
+        if (fd_log == NULL)
+            log_info("Failed to open log file: %s", config.log_file);
+        else
+            log_set_fp(fd_log);
+    }
+
+    if (config_file != NULL)
+        free(config_file);
+
+    if (log_file != NULL)
+        free(log_file);
 
     int err = 0;
     if ((err = database_init()) != 0)
