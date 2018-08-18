@@ -49,6 +49,7 @@ typedef struct wui_context_t
     pool_stats_t *pool_stats;
     float pool_fee;
     float payment_threshold;
+    uint32_t pool_port;
 } wui_context_t;
 
 int start_web_ui(wui_context_t *context);

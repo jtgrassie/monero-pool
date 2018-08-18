@@ -65,6 +65,7 @@ static char MINER_HASHRATE[] = "{{MINER_HASHRATE}}";
 static char POOL_BLOCKS_FOUND[] = "{{POOL_BLOCKS_FOUND}}";
 static char PAYMENT_THRESHOLD[] = "{{PAYMENT_THRESHOLD}}";
 static char POOL_FEE[] = "{{POOL_FEE}}";
+static char POOL_PORT[] = "{{POOL_PORT}}";
 static char MINER_BALANCE_DUE[] = "{{MINER_BALANCE_DUE}}";
 
 
@@ -142,6 +143,11 @@ answer_to_connection (void *cls, struct MHD_Connection *connection,
     p = strstr(page_buffer, POOL_FEE);
     memset(p, ' ', strlen(POOL_FEE));
     sprintf(temp, "%.2f", context->pool_fee);
+    memcpy(p, temp, strlen(temp));
+
+    sprintf(temp, "%d", context->pool_port);
+    p = strstr(page_buffer, POOL_PORT);
+    memset(p, ' ', strlen(POOL_PORT));
     memcpy(p, temp, strlen(temp));
 
     const char *wa = MHD_lookup_connection_value(connection, MHD_COOKIE_KIND, "wa");

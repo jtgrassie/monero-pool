@@ -2424,6 +2424,7 @@ int main(int argc, char **argv)
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
+    uic.pool_port = config.pool_port;
     uic.payment_threshold = config.payment_threshold;
     start_web_ui(&uic);
 
