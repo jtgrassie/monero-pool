@@ -77,6 +77,8 @@
 #define MAX_PATH 1024
 #define RPC_PATH "/json_rpc"
 #define ADDRESS_MAX 128
+#define BLOCK_TIME 120
+#define HR_BLOCK_COUNT 5
 
 #define uint128_t unsigned __int128
 
@@ -878,14 +880,20 @@ update_pool_hr(uint64_t height)
     }
     MDB_cursor_op op = MDB_SET;
     MDB_val key = { sizeof(height), &height };
+    uint64_t lowest = height - HR_BLOCK_COUNT;
     uint64_t cd = 0;
-    while (1)
+    log_trace("Getting pool hashrate from block %llu to %llu", height, lowest+1);
+    while (height > lowest)
     {
         MDB_val val;
         rc = mdb_cursor_get(cursor, &key, &val, op);
         op = MDB_NEXT_DUP;
         if (rc == MDB_NOTFOUND)
-            break;
+        {
+            op = MDB_SET;
+            height--;
+            continue;
+        }
         else if (rc != 0 && rc != MDB_NOTFOUND)
         {
             err = mdb_strerror(rc);
@@ -895,7 +903,7 @@ update_pool_hr(uint64_t height)
         share_t *s = (share_t*) val.mv_data;
         cd += s->difficulty;
     }
-    pool_stats.pool_hashrate = cd / 120;
+    pool_stats.pool_hashrate = cd / (HR_BLOCK_COUNT * BLOCK_TIME);
 cleanup:
     mdb_cursor_close(cursor);
     mdb_txn_abort(txn);
@@ -1400,7 +1408,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         free(block);
 
     pool_stats.network_difficulty = last_block_headers[0]->difficulty;
-    pool_stats.network_hashrate = last_block_headers[0]->difficulty / 120;
+    pool_stats.network_hashrate = last_block_headers[0]->difficulty / BLOCK_TIME;
 
     if (need_new_template)
     {
