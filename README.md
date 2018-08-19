@@ -20,8 +20,8 @@ daemon) and there is certainly room for improvement. Please see the
 [TODO](./TODO) file for the current list of things that could do with looking
 at.
 
-I plan on running a pool publicly on mainnet/testnet soon(TM) so it can be load
-tested further.
+There is a reference pool setup at [http://monerop.com](http://monerop.com) so
+it can be load tested further.
 
 If you want to help with testing or help setting up your own pool, give me a
 shout on IRC: jtgrassie on Freenode.

@@ -3,7 +3,6 @@ Things to work on:
  - Offload RPC requests to a separate thread (maybe not needed, test)
  - Improve the build system
  - Add protection against invalid share flooding
- - Add log-file option
  - Add daemonizing option (for those too lazy to nohup or use tmux)
 
 <!--
