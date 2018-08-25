@@ -71,7 +71,7 @@ reverse_hex(char *hex, size_t len)
 {
     assert(len % 2 == 0);
     size_t start = 0;
-    size_t end = len-1;
+    size_t end = len-2;
     char temp[2];
     while (start < end)
     {
