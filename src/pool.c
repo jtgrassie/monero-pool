@@ -2092,7 +2092,7 @@ client_on_error(struct bufferevent *bev, short error, void *ctx)
     else if (error & BEV_EVENT_ERROR)
     {
         /* check errno to see what error occurred */
-        log_debug("Client error: &d. Removing.", errno);
+        log_debug("Client error: %d. Removing.", errno);
     }
     else if (error & BEV_EVENT_TIMEOUT)
     {
