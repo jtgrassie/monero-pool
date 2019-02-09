@@ -1007,6 +1007,16 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_bn2bin(res, &bnb[0]);
     size_t cc = 4 - (32 - BN_num_bytes(res));
 
+    BN_free(bnt);
+    BN_free(res);
+
+    if (cc > 4 || cc == 0)
+    {
+        log_warn("Requested target too big/small: %llu", target);
+        target_hex[1] = '1';
+        return;
+    }
+
     char *ph = &target_hex[0];
     while (cc)
     {
@@ -1014,9 +1024,6 @@ target_to_hex(uint64_t target, char *target_hex)
         bin_to_hex((const char*)&c, 1, ph++);
         ph++;
     }
-
-    BN_free(bnt);
-    BN_free(res);
 }
 
 static char *
