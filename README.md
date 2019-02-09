@@ -100,6 +100,4 @@ would be very much appreciated.
 
 Please see the [LICENSE](./LICENSE) file.
 
-<!--
-vim: tw=80
--->
+[//]: # ( vim: set tw=80: )

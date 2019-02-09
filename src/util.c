@@ -36,8 +36,27 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "util.h"
+
+int
+is_hex_string(const char *str)
+{
+    if (strlen(str) == 0)
+        return -1;
+    const char *cp = str;
+    while (*cp)
+    {
+        if (!isxdigit(*cp))
+        {
+            printf("not hex: %c\n", *cp);
+            return -2;
+        }
+        cp++;
+    }
+    return 0;
+}
 
 void
 hex_to_bin(const char *hex, char *bin, size_t bin_size)

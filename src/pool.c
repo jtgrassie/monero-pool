@@ -1763,11 +1763,29 @@ client_clear_jobs(client_t *client)
 }
 
 static void
+send_validation_error(const client_t *client, const char *message)
+{
+    struct evbuffer *output = bufferevent_get_output(client->bev);
+    char *body = stratum_new_error_body(client->json_id, message);
+    evbuffer_add(output, body, strlen(body));
+    log_debug("Validation error: %s", message);
+    free(body);
+}
+
+static void
 client_on_login(json_object *message, client_t *client)
 {
     struct evbuffer *output = bufferevent_get_output(client->bev);
-    json_object *params = json_object_object_get(message, "params");
-    const char *address = json_object_get_string(json_object_object_get(params, "login"));
+    json_object *params = NULL;
+    if (!json_object_object_get_ex(message, "params", &params))
+        return send_validation_error(client, "No params");
+
+    json_object *login = NULL;
+    if (!json_object_object_get_ex(params, "login", &login))
+        return send_validation_error(client, "No login");
+    if (!json_object_is_type(login, json_type_string))
+        return send_validation_error(client, "login not a string");
+    const char *address = json_object_get_string(login);
     if (!address)
     {
         char *body = stratum_new_error_body(client->json_id, "Invalid login address");
@@ -1784,7 +1802,13 @@ client_on_login(json_object *message, client_t *client)
         free(body);
         return;
     }
-    const char *worker_id = json_object_get_string(json_object_object_get(params, "pass"));
+
+    json_object *pass = NULL;
+    if (!json_object_object_get_ex(params, "pass", &pass))
+        return send_validation_error(client, "No pass");
+    if (!json_object_is_type(pass, json_type_string))
+        return send_validation_error(client, "pass not a string");
+    const char *worker_id = json_object_get_string(pass);
     if (!worker_id)
     {
         char *body = stratum_new_error_body(client->json_id, "No password supplied");
@@ -1792,12 +1816,18 @@ client_on_login(json_object *message, client_t *client)
         free(body);
         return;
     }
-    const char *agent = json_object_get_string(json_object_object_get(params, "agent"));
-    if (agent)
+
+    json_object *agent_ob = NULL;
+    if (json_object_object_get_ex(params, "agent", &agent_ob))
     {
-        strncpy(client->agent, agent, 255);
-        client->is_proxy = strstr(agent, "proxy") != NULL ? true : false;
+        const char *agent = json_object_get_string(agent_ob);
+        if (agent)
+        {
+            strncpy(client->agent, agent, 255);
+            client->is_proxy = strstr(agent, "proxy") != NULL ? true : false;
+        }
     }
+
     strncpy(client->address, address, sizeof(client->address));
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id));
     uuid_t cid;
@@ -1812,16 +1842,48 @@ static void
 client_on_submit(json_object *message, client_t *client)
 {
     struct evbuffer *output = bufferevent_get_output(client->bev);
+
     json_object *params = json_object_object_get(message, "params");
-    const uint32_t nonce = ntohl(strtol(json_object_get_string(
-                    json_object_object_get(params, "nonce")), NULL, 16));
-    const char *result_hex = json_object_get_string(
-                    json_object_object_get(params, "result"));
-    const char *job_id = json_object_get_string(
-                    json_object_object_get(params, "job_id"));
+    if (params == NULL)
+        return send_validation_error(client, "No params");
+    if (!json_object_is_type(params, json_type_object))
+        return send_validation_error(client, "params not an object");
+
+    json_object *nonce_ob = json_object_object_get(params, "nonce");
+    if (nonce_ob == NULL)
+        return send_validation_error(client, "No nonce");
+    if (!json_object_is_type(nonce_ob, json_type_string))
+        return send_validation_error(client, "nonce not a string");
+    char *endptr = NULL;
+    const char *nptr = json_object_get_string(nonce_ob);
+    errno = 0;
+    long int li = strtol(nptr, &endptr, 16);
+    if (errno != 0 || nptr == endptr)
+        return send_validation_error(client, "nonce not a long int");
+    errno = 0;
+    const uint32_t nonce = ntohl(li);
+
+    json_object *result_ob = json_object_object_get(params, "result");
+    if (result_ob == NULL)
+        return send_validation_error(client, "No result");
+    if (!json_object_is_type(result_ob, json_type_string))
+        return send_validation_error(client, "result not a string");
+    const char *result_hex = json_object_get_string(result_ob);
+    if (strlen(result_hex) != 64)
+        return send_validation_error(client, "result invalid length");
+    if (is_hex_string(result_hex) != 0)
+        return send_validation_error(client, "result not hex string");
+
+    json_object *job_id_ob = json_object_object_get(params, "job_id");
+    if (job_id_ob == NULL)
+        return send_validation_error(client, "No job_id");
+    if (!json_object_is_type(job_id_ob, json_type_string))
+        return send_validation_error(client, "job_id not a string");
+    const char *job_id = json_object_get_string(job_id_ob);
+    if (strlen(job_id) != 32)
+        return send_validation_error(client, "job_id invalid length");
 
     job_t *job = client_find_job(client, job_id);
-
     if (job == NULL)
     {
         char *body = stratum_new_error_body(client->json_id, "Invalid job_id");
