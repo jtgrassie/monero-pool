@@ -50,7 +50,6 @@ is_hex_string(const char *str)
     {
         if (!isxdigit(*cp))
         {
-            printf("not hex: %c\n", *cp);
             return -2;
         }
         cp++;
