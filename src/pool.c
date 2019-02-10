@@ -1867,7 +1867,6 @@ client_on_submit(json_object *message, client_t *client)
     long int li = strtol(nptr, &endptr, 16);
     if (errno != 0 || nptr == endptr)
         return send_validation_error(client, "nonce not a long int");
-    errno = 0;
     const uint32_t nonce = ntohl(li);
 
     json_object *result_ob = json_object_object_get(params, "result");
@@ -2107,6 +2106,13 @@ client_on_read(struct bufferevent *bev, void *ctx)
     input = bufferevent_get_input(bev);
     output = bufferevent_get_output(bev);
 
+    if (evbuffer_get_length(input) >= MAX_LINE)
+    {
+        const char *too_long = "Message too long\n";
+        evbuffer_add(output, too_long, strlen(too_long));
+        return;
+    }
+
     while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF)))
     {
         json_object *message = json_tokener_parse(line);
@@ -2141,12 +2147,6 @@ client_on_read(struct bufferevent *bev, void *ctx)
 
         json_object_put(message);
         free(line);
-    }
-
-    if (evbuffer_get_length(input) >= MAX_LINE)
-    {
-        const char *too_long = "Message too long\n";
-        evbuffer_add(output, too_long, strlen(too_long));
     }
 }
 
