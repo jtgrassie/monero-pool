@@ -53,6 +53,9 @@
 #include <uuid/uuid.h>
 #include <getopt.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <json-c/json.h>
 #include <openssl/bn.h>
 #include <pthread.h>
@@ -72,7 +75,7 @@
 #define MAINNET_ADDRESS_PREFIX 18
 #define TESTNET_ADDRESS_PREFIX 53
 #define BLOCK_HEADERS_RANGE 10
-#define DB_SIZE 1024*1024*1024*5 // 5G
+#define DB_SIZE 0x140000000 /* 5G */
 #define DB_COUNT_MAX 10
 #define MAX_PATH 1024
 #define RPC_PATH "/json_rpc"
@@ -556,7 +559,7 @@ process_blocks(block_t *blocks, size_t count)
     for (int i=0; i<count; i++)
     {
         block_t *ib = &blocks[i];
-        log_trace("Processing block at height %llu", ib->height);
+        log_trace("Processing block at height %"PRIu64, ib->height);
         MDB_val key = { sizeof(ib->height), (void*)&ib->height };
         MDB_val val;
         MDB_cursor_op op = MDB_SET;
@@ -566,11 +569,11 @@ process_blocks(block_t *blocks, size_t count)
             op = MDB_NEXT_DUP;
             if (rc == MDB_NOTFOUND || rc != 0)
             {
-                log_trace("No stored block at height %llu", ib->height);
+                log_trace("No stored block at height %"PRIu64, ib->height);
                 if (rc != MDB_NOTFOUND)
                 {
                     err = mdb_strerror(rc);
-                    log_debug("No stored block at height %llu with error: ", ib->height, err);
+                    log_debug("No stored block at height %"PRIu64" with error: %d", ib->height, err);
                 }
                 break;
             }
@@ -581,7 +584,7 @@ process_blocks(block_t *blocks, size_t count)
             }
             if (ib->status & BLOCK_ORPHANED)
             {
-                log_debug("Orphaned block at height %llu", ib->height);
+                log_debug("Orphaned block at height %"PRIu64, ib->height);
                 block_t bp;
                 memcpy(&bp, sb, sizeof(block_t));
                 bp.status |= BLOCK_ORPHANED;
@@ -606,7 +609,7 @@ process_blocks(block_t *blocks, size_t count)
             rc = payout_block(&bp, txn);
             if (rc == 0)
             {
-                log_debug("Paided out block %llu", bp.height);
+                log_debug("Paided out block %"PRIu64, bp.height);
                 MDB_val new_val = {sizeof(block_t), (void*)&bp};
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
             }
@@ -625,7 +628,7 @@ payout_block(block_t *block, MDB_txn *parent)
     /*
       PPLNS
     */
-    log_info("Payout on block at height %llu", block->height);
+    log_info("Payout on block at height %"PRIu64, block->height);
     int rc;
     char *err;
     MDB_txn *txn;
@@ -695,7 +698,7 @@ payout_block(block_t *block, MDB_txn *parent)
 static int
 balance_add(const char *address, uint64_t amount, MDB_txn *parent)
 {
-    log_trace("Adding %llu to %s's balance", amount, address);
+    log_trace("Adding %"PRIu64" to %s's balance", amount, address);
     int rc;
     char *err;
     MDB_txn *txn;
@@ -786,11 +789,11 @@ send_payments()
         if (amount < threshold)
             continue;
 
-        log_info("Sending payment of %llu to %s\n", amount, address);
+        log_info("Sending payment of %"PRIu64" to %s\n", amount, address);
 
         char body[RPC_BODY_MAX];
         snprintf(body, RPC_BODY_MAX, "{\"id\":\"0\",\"jsonrpc\":\"2.0\",\"method\":\"transfer\",\"params\":{"
-                "\"destinations\":[{\"amount\":%llu,\"address\":\"%s\"}],\"mixin\":6}}",
+                "\"destinations\":[{\"amount\":%"PRIu64",\"address\":\"%s\"}],\"mixin\":6}}",
                 amount, address);
         log_trace(body);
         rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
@@ -890,7 +893,7 @@ update_pool_hr(uint64_t height)
     MDB_val key = { sizeof(height), &height };
     uint64_t lowest = height - HR_BLOCK_COUNT;
     uint64_t cd = 0;
-    log_trace("Getting pool hashrate from block %llu to %llu", height, lowest+1);
+    log_trace("Getting pool hashrate from block %"PRIu64" to %"PRIu64, height, lowest+1);
     while (height > lowest)
     {
         MDB_val val;
@@ -1008,7 +1011,7 @@ target_to_hex(uint64_t target, char *target_hex)
     BIGNUM *res = BN_new();
     BIGNUM *bnt = NULL;
     char st[96];
-    snprintf(st, 96, "%llu", target);
+    snprintf(st, 96, "%"PRIu64, target);
     BN_dec2bn(&bnt, st);
     BN_div(res, NULL, base_diff, bnt, bn_ctx);
     unsigned char bnb[64];
@@ -1020,7 +1023,7 @@ target_to_hex(uint64_t target, char *target_hex)
 
     if (cc > 4 || cc == 0)
     {
-        log_warn("Requested target too big/small: %llu", target);
+        log_warn("Requested target too big/small: %"PRIu64, target);
         target_hex[1] = '1';
         return;
     }
@@ -1050,8 +1053,8 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
-                "\"difficulty\":%llu,\"height\":%llu,\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
-                "\"client_pool_offset\":%d,\"target_diff\":%llu,\"target_diff_hex\":\"%.8s\"},"
+                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
+                "\"client_pool_offset\":%d,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1060,8 +1063,8 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
-                "\"difficulty\":%llu,\"height\":%llu,\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
-                "\"client_pool_offset\":%d,\"target_diff\":%llu,\"target_diff_hex\":\"%.8s\"},"
+                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
+                "\"client_pool_offset\":%d,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1167,7 +1170,7 @@ rpc_new_request_body(const char* method, char* fmt, ...)
                     break;
                 case 'd':
                     d = va_arg(args, uint64_t);
-                    snprintf(pr, RPC_BODY_MAX - strlen(result), "%llu", d);
+                    snprintf(pr, RPC_BODY_MAX - strlen(result), "%"PRIu64, d);
                     pr += strlen(pr);
                     break;
             }
@@ -1472,7 +1475,7 @@ rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
     pool_stats.pool_blocks_found++;
     block_t *b = (block_t*)callback->data;
     pool_stats.last_block_found = b->timestamp;
-    log_info("Block submitted at height: %llu", b->height);
+    log_info("Block submitted at height: %"PRIu64, b->height);
     int rc = store_block(b->height, b);
     if (rc != 0)
         log_warn("Failed to store block: %s", mdb_strerror(rc));
@@ -1734,7 +1737,7 @@ client_send_job(client_t *client, bool response)
     uint8_t retarget_time = client->is_proxy ? 5 : 120;
     uint64_t target = fmax((double)client->hashes / duration * retarget_time, config.pool_start_diff);
     job->target = target;
-    log_debug("Client %.32s target now %llu", client->client_id, target);
+    log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
 
     char *body;
     if (!client->is_proxy)
@@ -2037,7 +2040,7 @@ client_on_submit(json_object *message, client_t *client)
         share.difficulty = job->target;
         strncpy(share.address, client->address, sizeof(share.address));
         share.timestamp = now;
-        log_debug("Storing share with difficulty: %llu", share.difficulty);
+        log_debug("Storing share with difficulty: %"PRIu64, share.difficulty);
         int rc = store_share(share.height, &share);
         if (rc != 0)
             log_warn("Failed to store share: %s", mdb_strerror(rc));
