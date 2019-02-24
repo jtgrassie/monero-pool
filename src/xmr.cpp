@@ -94,9 +94,9 @@ int parse_address(const char *input, uint64_t *prefix)
     return rv ? 0 : -1;
 }
 
-void get_hash(const char *input, const size_t in_size, char **output)
+void get_hash(const char *input, const size_t in_size, char **output, int variant, uint64_t height)
 {
-    crypto::cn_slow_hash(input, in_size, reinterpret_cast<crypto::hash&>(*output), 2);
+    crypto::cn_slow_hash(input, in_size, reinterpret_cast<crypto::hash&>(*output), variant, height);
 }
 
 bool check_hash(const char* hash, uint64_t difficulty)

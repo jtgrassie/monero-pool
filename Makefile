@@ -77,20 +77,23 @@ CC = gcc
 STORE = build/$(TYPE)
 SOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.cpp))
 CSOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.c))
+SSOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.S))
 HTMLSOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.html))
 HEADERS := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.h))
 OBJECTS := $(addprefix $(STORE)/, $(SOURCE:.cpp=.o))
 COBJECTS := $(addprefix $(STORE)/, $(CSOURCE:.c=.o))
+SOBJECTS := $(addprefix $(STORE)/, $(SSOURCE:.S=.o))
 HTMLOBJECTS := $(addprefix $(STORE)/, $(HTMLSOURCE:.html=.o))
 DFILES := $(addprefix $(STORE)/,$(SOURCE:.cpp=.d))
 CDFILES := $(addprefix $(STORE)/,$(CSOURCE:.c=.d))
+SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 
 .PHONY: clean backup dirs
 
-$(TARGET): dirs $(OBJECTS) $(COBJECTS) $(HTMLOBJECTS)
+$(TARGET): dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
-	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
+	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
 	@cp pool.conf $(STORE)/
 
 $(STORE)/%.o: %.cpp
@@ -101,6 +104,13 @@ $(STORE)/%.o: %.cpp
 	@rm -f $(STORE)/$*.dd
 
 $(STORE)/%.o: %.c
+	@echo Creating object file for $*...
+	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC)\
+		$(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(STORE)/$*.dd > $(STORE)/$*.d
+	@rm -f $(STORE)/$*.dd
+
+$(STORE)/%.o: %.S
 	@echo Creating object file for $*...
 	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC)\
 		$(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
