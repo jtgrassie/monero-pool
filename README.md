@@ -58,7 +58,7 @@ First install all the dependencies.
 Then to compile the pool as a release build, run:
 
 ```
-make TYPE=release
+make release
 ```
 
 The application will be built in `build/release/`.
@@ -83,7 +83,7 @@ options are self explanatory.
 Ensure you have your daemon and wallet RPC up and running with the correct host
 and port settings in the pool config file.
 
-Then simply `cd build/debug|release` and `./monero-pool`. 
+Then simply `cd build/debug|release` and run `./monero-pool`.
 
 ## Supporting the project
 

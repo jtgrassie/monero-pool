@@ -1092,7 +1092,7 @@ stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\","
-                "\"height\":%"PRIu64"}}\n", 
+                "\"height\":%"PRIu64"}}\n",
                 json_id, client_id, blob, job_id, target_hex, height);
     }
     return body;

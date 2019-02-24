@@ -2,6 +2,14 @@ TARGET = monero-pool
 
 TYPE = debug
 
+ifeq ($(MAKECMDGOALS),release)
+TYPE = release
+endif
+
+ifeq ($(MAKECMDGOALS),profile)
+TYPE = profile
+endif
+
 DIRS = src data rxi/log/src monero monero/epee/include monero/epee/src monero/common monero/crypto \
        monero/cryptonote_basic monero/cryptonote_core monero/device monero/ringdt monero/easylogging++
 
@@ -89,12 +97,14 @@ CDFILES := $(addprefix $(STORE)/,$(CSOURCE:.c=.d))
 SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 
-.PHONY: clean backup dirs
+.PHONY: clean backup dirs debug release profile
 
 $(TARGET): dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
 	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
 	@cp pool.conf $(STORE)/
+
+debug release profile: $(TARGET)
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
@@ -128,8 +138,9 @@ $(STORE)/%.o: %.html
 
 clean:
 	@echo Making clean.
-	@-rm -f $(foreach DIR,$(DIRS),$(STORE)/$(DIR)/*.d $(STORE)/$(DIR)/*.o)
-	@-rm -f $(TARGET)
+	@find ./build -type f -name '*.o' -delete
+	@find ./build -type f -name '*.d' -delete
+	@find ./build -type f -name $(TARGET) -delete
 
 backup:
 	@-if [ ! -e build/backup ]; then mkdir -p build/backup; fi;
@@ -141,4 +152,5 @@ dirs:
 
 -include $(DFILES)
 -include $(CDFILES)
+-include $(SDFILES)
 
