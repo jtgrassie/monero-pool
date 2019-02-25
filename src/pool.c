@@ -226,7 +226,7 @@ static char * stratum_new_proxy_job_body(int json_id, const char *client_id, con
         const block_template_t *block_template, const char *template_blob,
         uint64_t target, bool response);
 static char * stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
-        const char *blob, uint64_t target, bool response);
+        const char *blob, uint64_t target, uint64_t height, bool response);
 static char * stratum_new_error_body(int json_id, const char *error);
 static char * stratum_new_status_body(int json_id, const char *status);
 static void client_add(int fd, struct bufferevent *bev);
@@ -1074,7 +1074,7 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
 
 static char *
 stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
-        const char *blob, uint64_t target, bool response)
+        const char *blob, uint64_t target, uint64_t height, bool response)
 {
     char *body = calloc(CLIENT_BODY_MAX, sizeof(char));
 
@@ -1084,14 +1084,16 @@ stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
     if (response)
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
-                ":{\"id\":\"%.32s\",\"job\":{\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\"},"
-                "\"status\":\"OK\"}}\n", json_id, client_id, blob, job_id, target_hex);
+                ":{\"id\":\"%.32s\",\"job\":{"
+                "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\",\"height\":%"PRIu64"},"
+                "\"status\":\"OK\"}}\n", json_id, client_id, blob, job_id, target_hex, height);
     }
     else
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
-                ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\"}}\n", 
-                json_id, client_id, blob, job_id, target_hex);
+                ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\","
+                "\"height\":%"PRIu64"}}\n",
+                json_id, client_id, blob, job_id, target_hex, height);
     }
     return body;
 }
@@ -1743,7 +1745,7 @@ client_send_job(client_t *client, bool response)
     if (!client->is_proxy)
     {
         body = stratum_new_job_body(client->json_id, client->client_id, job_id,
-            job->blob, target, response);
+            job->blob, target, bt->height, response);
     }
     else
     {
@@ -1956,7 +1958,9 @@ client_on_submit(json_object *message, client_t *client)
     /* Hash and compare */
     char result_hash[32];
     char submitted_hash[32];
-    get_hash(hashing_blob, hashing_blob_size, (char**)&result_hash);
+    uint8_t major_version = (uint8_t)block[0];
+    const int cn_variant = major_version >= 7 ? major_version - 6 : 0;
+    get_hash(hashing_blob, hashing_blob_size, (char**)&result_hash, cn_variant, bt->height);
     hex_to_bin(result_hex, submitted_hash, 32);
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)
