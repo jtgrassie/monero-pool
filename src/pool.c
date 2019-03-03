@@ -890,13 +890,14 @@ update_pool_hr(uint64_t height)
         mdb_txn_abort(txn);
     }
     MDB_cursor_op op = MDB_SET;
-    MDB_val key = { sizeof(height), &height };
     uint64_t lowest = height - HR_BLOCK_COUNT;
     uint64_t cd = 0;
     log_trace("Getting pool hashrate from block %"PRIu64" to %"PRIu64, height, lowest+1);
     while (height > lowest)
     {
         MDB_val val;
+        MDB_val key = { sizeof(height), &height };
+        log_trace("Checking for shares at height %"PRIu64, *((uint64_t*)key.mv_data));
         rc = mdb_cursor_get(cursor, &key, &val, op);
         op = MDB_NEXT_DUP;
         if (rc == MDB_NOTFOUND)
@@ -912,6 +913,7 @@ update_pool_hr(uint64_t height)
             goto cleanup;
         }
         share_t *s = (share_t*) val.mv_data;
+        log_trace("Incrementing pool HR by %"PRIu64, s->difficulty);
         cd += s->difficulty;
     }
     pool_stats.pool_hashrate = cd / (HR_BLOCK_COUNT * BLOCK_TIME);
