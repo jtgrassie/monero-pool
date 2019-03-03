@@ -20,22 +20,67 @@
     <body>
         <header>THE Monero Mining Pool</header>
         <table>
-            <tr><td>Pool HR: </td><td>{{POOL_HASHRATE}}</td></tr>
-            <tr><td>Network HR: </td><td>{{NETWORK_HASHRATE}}</td></tr>
-            <tr><td>Blocks found: </td><td>{{POOL_BLOCKS_FOUND}}</td></tr>
-            <tr><td>Last block found: </td><td>{{LAST_BLOCK_FOUND}}</td></tr>
-            <tr><td>Payment threshold: </td><td>{{PAYMENT_THRESHOLD}}</td></tr>
-            <tr><td>Pool fee: </td><td>{{POOL_FEE}}</td></tr>
-            <tr><td>Pool port: </td><td>{{POOL_PORT}}</td></tr>
-            <tr><td>Miners connected: </td><td>{{MINERS_CONNECTED}}</td></tr>
-            <tr class="wallet"><td>Your HR: </td><td>{{MINER_HASHRATE}}</td></tr>
-            <tr class="wallet"><td>Balance due: </td><td>{{MINER_BALANCE_DUE}}</td></tr>
+            <tr><td>Pool HR: </td><td id="pool_hashrate"></td></tr>
+            <tr><td>Network HR: </td><td id="network_hashrate"></td></tr>
+            <tr><td>Blocks found: </td><td id="pool_blocks_found"></td></tr>
+            <tr><td>Last block found: </td><td id="last_block_found"></td></tr>
+            <tr><td>Payment threshold: </td><td id="payment_threshold"></td></tr>
+            <tr><td>Pool fee: </td><td id="pool_fee"></td></tr>
+            <tr><td>Pool port: </td><td id="pool_port"></td></tr>
+            <tr><td>Miners connected: </td><td id="connected_miners"></td></tr>
+            <tr class="wallet"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
+            <tr class="wallet"><td>Balance due: </td><td id="miner_balance"></td></tr>
         </table>
         <form>
             Your wallet address: <input type="text" id="wa" name="address" />
             <input type="submit" value="Submit" />
         </form>
         <script>
+            function format_last_block(last)
+            {
+                var now = new Date().getTime() / 1000;
+                var diff = now - last;
+                if (last == 0)
+                    return "None yet";
+                else if (diff < 60)
+                    return parseInt(diff) + " seconds ago";
+                else if (diff < 3600)
+                    return parseInt(diff/60) + " minutes ago";
+                else if (diff < 86400)
+                    return parseInt(diff/3600) + " hours ago";
+                else
+                    return parseInt(diff/86400) + " days ago";
+            }
+
+            function format_hashrate(hr)
+            {
+                if (hr < 1000)
+                    return parseInt(hr) + " H/s";
+                else if (hr < 1000000)
+                    return parseFloat(hr/1000).toFixed(2) + " KH/s";
+                else if (hr < 1000000000000)
+                    return parseFloat(hr/1000000).toFixed(2) + " MH/s";
+                else
+                    return parseFloat(hr/1000000000000).toFixed(2) + " GH/s";
+            }
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/stats");
+            xhr.onload = function()
+            {
+                var stats = JSON.parse(xhr.responseText);
+                for (var e in stats)
+                {
+                    var el = document.querySelector("#"+e);
+                    if (e == "last_block_found")
+                        el.innerHTML = format_last_block(stats[e]);
+                    else if (/hashrate/.test(e))
+                        el.innerHTML = format_hashrate(stats[e]);
+                    else
+                        el.innerHTML = stats[e];
+                }
+            };
+
             var f = document.querySelector("form");            
             var wa = document.querySelector("#wa");            
             f.onsubmit = function(e)
@@ -49,6 +94,7 @@
             };
             window.onload = function()
             {
+                xhr.send(null);
                 if (/wa=[0-9a-fA-F]+/.test(document.cookie))
                 {
                     var wh = document.querySelectorAll(".wallet");
@@ -59,9 +105,10 @@
                     var c = document.cookie.split("=");
                     wa.value = c[1];
                 }
-                setTimeout(function()
+                setInterval(function()
                 {
-                    window.location.reload(1);
+                    xhr.open("POST", "/stats");
+                    xhr.send(null);
                 }, 30000);
             };
         </script>

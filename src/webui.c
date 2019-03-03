@@ -30,6 +30,9 @@
   Parts of the project are originally copyright (c) 2012-2013 The Cryptonote developers
 */
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
@@ -51,35 +54,53 @@
 
 #define TAG_MAX 17
 #define PAGE_MAX 4096
+#define JSON_MAX 512
 
 extern unsigned char webui_html[];
 extern unsigned int webui_html_len;
 
 static struct MHD_Daemon *mhd_daemon;
-static char page_buffer[PAGE_MAX];
-static char MINERS_CONNECTED[] = "{{MINERS_CONNECTED}}";
-static char LAST_BLOCK_FOUND[] = "{{LAST_BLOCK_FOUND}}";
-static char NETWORK_HASHRATE[] = "{{NETWORK_HASHRATE}}";
-static char POOL_HASHRATE[] = "{{POOL_HASHRATE}}";
-static char MINER_HASHRATE[] = "{{MINER_HASHRATE}}";
-static char POOL_BLOCKS_FOUND[] = "{{POOL_BLOCKS_FOUND}}";
-static char PAYMENT_THRESHOLD[] = "{{PAYMENT_THRESHOLD}}";
-static char POOL_FEE[] = "{{POOL_FEE}}";
-static char POOL_PORT[] = "{{POOL_PORT}}";
-static char MINER_BALANCE_DUE[] = "{{MINER_BALANCE_DUE}}";
 
-
-static void
-format_hashrate(uint64_t hashrate, char* output, size_t len)
+int
+send_json_stats (void *cls, struct MHD_Connection *connection)
 {
-    if (hashrate < 1000)
-        snprintf(output, len, "%d H/s", (int) hashrate);
-    else if (hashrate < 1000000)
-        snprintf(output, len, "%.2f KH/s", (double) hashrate / 1000.0);
-    else if (hashrate < 1000000000000)
-        snprintf(output, len, "%.2f MH/s", (double) hashrate / 1000000.0);
-    else
-        snprintf(output, len, "%.2f GH/s", (double) hashrate / 1000000000000.0);
+    struct MHD_Response *response;
+    int ret;
+    wui_context_t *context = (wui_context_t*) cls;
+    char json[JSON_MAX];
+    uint64_t ph = context->pool_stats->pool_hashrate;
+    uint64_t nh = context->pool_stats->network_hashrate;
+    uint64_t lbf = context->pool_stats->last_block_found;
+    uint32_t pbf = context->pool_stats->pool_blocks_found;
+    uint64_t mh = 0;
+    double mb = 0.0;
+    const char *wa = MHD_lookup_connection_value(connection, MHD_COOKIE_KIND, "wa");
+    if (wa != NULL)
+    {
+        mh = miner_hr(wa);
+        uint64_t balance = miner_balance(wa);
+        mb = (double) balance / 1000000000000.0;
+    }
+    snprintf(json, JSON_MAX, "{"
+            "\"pool_hashrate\":%"PRIu64","
+            "\"network_hashrate\":%"PRIu64","
+            "\"last_block_found\":%"PRIu64","
+            "\"pool_blocks_found\":%d,"
+            "\"payment_threshold\":%.2f,"
+            "\"pool_fee\":%.2f,"
+            "\"pool_port\":%d,"
+            "\"connected_miners\":%d,"
+            "\"miner_hashrate\":%"PRIu64","
+            "\"miner_balance\":%.8f"
+            "}", ph, nh, lbf, pbf,
+            context->payment_threshold, context->pool_fee,
+            context->pool_port, context->pool_stats->connected_miners,
+            mh, mb);
+    response = MHD_create_response_from_buffer(strlen(json),
+            (void*) json, MHD_RESPMEM_MUST_COPY);
+    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    return ret;
 }
 
 int
@@ -89,86 +110,13 @@ answer_to_connection (void *cls, struct MHD_Connection *connection,
         const char *upload_data,
         size_t *upload_data_size, void **con_cls)
 {
-    static char temp[TAG_MAX];
+    if (strstr(url, "/stats") != NULL)
+        return send_json_stats(cls, connection);
+
     struct MHD_Response *response;
-    int ret;
-    wui_context_t *context = (wui_context_t*) cls;
-
-    memset(page_buffer, 0, PAGE_MAX);
-    memcpy(page_buffer, webui_html, webui_html_len);
-
-    char *p = strstr(page_buffer, MINERS_CONNECTED);
-    memset(p, ' ', strlen(MINERS_CONNECTED));
-    sprintf(temp, "%d", context->pool_stats->connected_miners);
-    memcpy(p, temp, strlen(temp));
-
-    time_t now = time(NULL);
-    double diff = difftime(now, context->pool_stats->last_block_found);
-    if (context->pool_stats->last_block_found == 0)
-        snprintf(temp, TAG_MAX, "None yet");
-    else if (diff < 60)
-        snprintf(temp, TAG_MAX, "%d seconds ago", (int) diff);
-    else if (diff < 3600)
-        snprintf(temp, TAG_MAX, "%d minutes ago", (int) diff / 60);
-    else if (diff < 86400)
-        snprintf(temp, TAG_MAX, "%d hours ago", (int) diff / 3600);
-    else
-        snprintf(temp, TAG_MAX, "%d days ago", (int) diff / 86400);
-    p = strstr(page_buffer, LAST_BLOCK_FOUND);
-    memset(p, ' ', strlen(LAST_BLOCK_FOUND));
-    memcpy(p, temp, strlen(temp));
-
-    uint64_t nh = context->pool_stats->network_hashrate;
-    format_hashrate(nh, temp, TAG_MAX);
-    p = strstr(page_buffer, NETWORK_HASHRATE);
-    memset(p, ' ', strlen(NETWORK_HASHRATE));
-    memcpy(p, temp, strlen(temp));
-
-    uint64_t ph = context->pool_stats->pool_hashrate;
-    format_hashrate(ph, temp, TAG_MAX);
-    p = strstr(page_buffer, POOL_HASHRATE);
-    memset(p, ' ', strlen(POOL_HASHRATE));
-    memcpy(p, temp, strlen(temp));
-
-    sprintf(temp, "%d", context->pool_stats->pool_blocks_found);
-    p = strstr(page_buffer, POOL_BLOCKS_FOUND);
-    memset(p, ' ', strlen(POOL_BLOCKS_FOUND));
-    memcpy(p, temp, strlen(temp));
-
-    p = strstr(page_buffer, PAYMENT_THRESHOLD);
-    memset(p, ' ', strlen(PAYMENT_THRESHOLD));
-    sprintf(temp, "%.2f", context->payment_threshold);
-    memcpy(p, temp, strlen(temp));
-
-    p = strstr(page_buffer, POOL_FEE);
-    memset(p, ' ', strlen(POOL_FEE));
-    sprintf(temp, "%.2f", context->pool_fee);
-    memcpy(p, temp, strlen(temp));
-
-    sprintf(temp, "%d", context->pool_port);
-    p = strstr(page_buffer, POOL_PORT);
-    memset(p, ' ', strlen(POOL_PORT));
-    memcpy(p, temp, strlen(temp));
-
-    const char *wa = MHD_lookup_connection_value(connection, MHD_COOKIE_KIND, "wa");
-    if (wa != NULL)
-    {
-        uint64_t mh = miner_hr(wa);
-        format_hashrate(mh, temp, TAG_MAX);
-        p = strstr(page_buffer, MINER_HASHRATE);
-        memset(p, ' ', strlen(MINER_HASHRATE));
-        memcpy(p, temp, strlen(temp));
-
-        uint64_t balance = miner_balance(wa);
-        p = strstr(page_buffer, MINER_BALANCE_DUE);
-        memset(p, ' ', strlen(MINER_BALANCE_DUE));
-        sprintf(temp, "%.8f", (double) balance / 1000000000000.0);
-        memcpy(p, temp, strlen(temp));
-    }
-
-    response = MHD_create_response_from_buffer(strlen(page_buffer),
-            (void*) page_buffer, MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    response = MHD_create_response_from_buffer(webui_html_len,
+            (void*) webui_html, MHD_RESPMEM_PERSISTENT);
+    int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
     return ret;
 }
