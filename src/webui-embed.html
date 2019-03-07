@@ -65,7 +65,6 @@
             }
 
             var xhr = new XMLHttpRequest();
-            xhr.open("POST", "/stats");
             xhr.onload = function()
             {
                 var stats = JSON.parse(xhr.responseText);
@@ -94,7 +93,6 @@
             };
             window.onload = function()
             {
-                xhr.send(null);
                 if (/wa=[0-9a-fA-F]+/.test(document.cookie))
                 {
                     var wh = document.querySelectorAll(".wallet");
@@ -105,11 +103,13 @@
                     var c = document.cookie.split("=");
                     wa.value = c[1];
                 }
-                setInterval(function()
+                var get_stats = function()
                 {
-                    xhr.open("POST", "/stats");
+                    xhr.open("GET", "/stats");
                     xhr.send(null);
-                }, 30000);
+                };
+                setInterval(get_stats, 30000);
+                get_stats();
             };
         </script>
     </body>
