@@ -214,7 +214,7 @@ static int payout_block(block_t *block, MDB_txn *parent);
 static int balance_add(const char *address, uint64_t amount, MDB_txn *parent);
 static int send_payments();
 static int startup_pauout(uint64_t height);
-static void update_pool_hr(uint64_t height);
+static void update_pool_hr();
 static void block_template_free(block_template_t *block_template);
 static void block_templates_free();
 static void last_block_headers_free();
@@ -273,7 +273,7 @@ static MDB_dbi db_payments;
 static BN_CTX *bn_ctx;
 static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
-static pthread_mutex_t mutex_miner_hr = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
@@ -283,7 +283,7 @@ static FILE *fd_log;
     if (!json_object_is_type(name, type))                            \
         return send_validation_error(client, #name " not a " #type);
 
-int
+static int
 compare_uint64(const MDB_val *a, const MDB_val *b)
 {
     const uint64_t va = *(const uint64_t *)a->mv_data;
@@ -291,7 +291,7 @@ compare_uint64(const MDB_val *a, const MDB_val *b)
     return (va < vb) ? -1 : va > vb;
 }
 
-int
+static int
 compare_string(const MDB_val *a, const MDB_val *b)
 {
     const char *va = (const char*) a->mv_data;
@@ -299,7 +299,7 @@ compare_string(const MDB_val *a, const MDB_val *b)
     return strcmp(va, vb);
 }
 
-int
+static int
 compare_block(const MDB_val *a, const MDB_val *b)
 {
     const block_t *va = (const block_t*) a->mv_data;
@@ -311,7 +311,7 @@ compare_block(const MDB_val *a, const MDB_val *b)
         return sc;
 }
 
-int
+static int
 compare_share(const MDB_val *a, const MDB_val *b)
 {
     const share_t *va = (const share_t*) a->mv_data;
@@ -323,7 +323,7 @@ compare_share(const MDB_val *a, const MDB_val *b)
         return sc;
 }
 
-int
+static int
 compare_payment(const MDB_val *a, const MDB_val *b)
 {
     const payment_t *va = (const payment_t*) a->mv_data;
@@ -465,12 +465,12 @@ store_block(uint64_t height, block_t *block)
 uint64_t
 miner_hr(const char *address)
 {
-    pthread_mutex_lock(&mutex_miner_hr);
+    pthread_mutex_lock(&mutex_clients);
     client_t *c = pool_clients.clients;
     uint64_t hr = 0;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
-        if (strncmp(c->address, address, ADDRESS_MAX) == 0)
+        if (c->connected_since != 0 && strncmp(c->address, address, ADDRESS_MAX) == 0)
         {
             double d = difftime(time(NULL), c->connected_since);
             if (d == 0.0)
@@ -479,7 +479,7 @@ miner_hr(const char *address)
             break;
         }
     }
-    pthread_mutex_unlock(&mutex_miner_hr);
+    pthread_mutex_unlock(&mutex_clients);
     return hr;
 }
 
@@ -793,7 +793,7 @@ send_payments()
 
         char body[RPC_BODY_MAX];
         snprintf(body, RPC_BODY_MAX, "{\"id\":\"0\",\"jsonrpc\":\"2.0\",\"method\":\"transfer\",\"params\":{"
-                "\"destinations\":[{\"amount\":%"PRIu64",\"address\":\"%s\"}],\"mixin\":6}}",
+                "\"destinations\":[{\"amount\":%"PRIu64",\"address\":\"%s\"}],\"mixin\":10}}",
                 amount, address);
         log_trace(body);
         rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
@@ -872,54 +872,21 @@ startup_pauout(uint64_t height)
 }
 
 static void
-update_pool_hr(uint64_t height)
+update_pool_hr()
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)) != 0)
+    uint64_t hr = 0;
+    client_t *c = pool_clients.clients;
+    for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
-        err = mdb_strerror(rc);
-        log_error("%s", err);
-    }
-    if ((rc = mdb_cursor_open(txn, db_shares, &cursor)) != 0)
-    {
-        err = mdb_strerror(rc);
-        log_error("%s", err);
-        mdb_txn_abort(txn);
-    }
-    MDB_cursor_op op = MDB_SET;
-    uint64_t lowest = height - HR_BLOCK_COUNT;
-    uint64_t cd = 0;
-    log_trace("Getting pool hashrate from block %"PRIu64" to %"PRIu64, height, lowest+1);
-    while (height > lowest)
-    {
-        MDB_val val;
-        MDB_val key = { sizeof(height), &height };
-        log_trace("Checking for shares at height %"PRIu64, *((uint64_t*)key.mv_data));
-        rc = mdb_cursor_get(cursor, &key, &val, op);
-        op = MDB_NEXT_DUP;
-        if (rc == MDB_NOTFOUND)
+        if (c->connected_since != 0)
         {
-            op = MDB_SET;
-            height--;
-            continue;
+            double d = difftime(time(NULL), c->connected_since);
+            if (d == 0.0)
+                continue;
+            hr += c->hashes / d;
         }
-        else if (rc != 0 && rc != MDB_NOTFOUND)
-        {
-            err = mdb_strerror(rc);
-            log_error("%s", err);
-            goto cleanup;
-        }
-        share_t *s = (share_t*) val.mv_data;
-        log_trace("Incrementing pool HR by %"PRIu64, s->difficulty);
-        cd += s->difficulty;
     }
-    pool_stats.pool_hashrate = cd / (HR_BLOCK_COUNT * BLOCK_TIME);
-cleanup:
-    mdb_cursor_close(cursor);
-    mdb_txn_abort(txn);
+    pool_stats.pool_hashrate = hr;
 }
 
 static void
@@ -1431,10 +1398,10 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
 
     pool_stats.network_difficulty = last_block_headers[0]->difficulty;
     pool_stats.network_hashrate = last_block_headers[0]->difficulty / BLOCK_TIME;
+    update_pool_hr();
 
     if (need_new_template)
     {
-        update_pool_hr(last_block_headers[0]->height-1);
         log_info("Fetching new block template");
         char *body = rpc_new_request_body("get_block_template", "sssd", "wallet_address", config.pool_wallet, "reserve_size", 17);
         rpc_callback_t *c1 = calloc(1, sizeof(rpc_callback_t));
@@ -1614,7 +1581,7 @@ client_add(int fd, struct bufferevent *bev)
     bool resize = true;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
-        if (c->fd == 0)
+        if (c->connected_since == 0)
         {
             resize = false;
             break;
@@ -1622,10 +1589,12 @@ client_add(int fd, struct bufferevent *bev)
     }
     if (resize)
     {
+        pthread_mutex_lock(&mutex_clients);
         pool_clients.count += POOL_CLIENTS_GROW;
         c = realloc(pool_clients.clients, sizeof(client_t) * pool_clients.count);
         pool_clients.clients = c;
         c += pool_clients.count - POOL_CLIENTS_GROW;
+        pthread_mutex_unlock(&mutex_clients);
         log_debug("Client pool can now hold %zu clients", pool_clients.count);
     }
     memset(c, 0, sizeof(client_t));
@@ -2375,7 +2344,7 @@ cleanup()
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
-    pthread_mutex_destroy(&mutex_miner_hr);
+    pthread_mutex_destroy(&mutex_clients);
     log_info("Pool shutdown successfully");
     if (fd_log != NULL)
         fclose(fd_log);
