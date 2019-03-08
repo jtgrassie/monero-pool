@@ -1,10 +1,9 @@
 Things to work on:
+ - Improve the build system (ignore missing definitions of Monero objects, it's
+   just noise)
+ - Add protection against invalid share flooding
  - Offload payout processing to a separate thread (maybe not needed, test)
  - Offload RPC requests to a separate thread (maybe not needed, test)
- - Improve the build system
- - Add protection against invalid share flooding
  - Add daemonizing option (for those too lazy to nohup or use tmux)
 
-<!--
-vim: tw=80: filetype=markdown
--->
+[//]: # ( vim: set tw=80: )

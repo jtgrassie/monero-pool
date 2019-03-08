@@ -2,26 +2,27 @@
 
 A Monero mining pool server written in C.
 
-Design decisions are focused on performance, hence the use of libevent and LMDB.
-Currently this is single threaded (which is fine because of libevent) but work
-is planned to offload some of the tasks to a thread pool to allow even faster
-operation.
+Design decisions are focused on performance and efficiency, hence the use of
+libevent and LMDB.  Currently it uses only two threads (one for the stratum
+clients and one for the web UI clients). It gets away with this thanks to the
+efficiency of libevent (for the stratum clients) and some sensible
+proxying/caching being placed in front of the [web UI](#web-ui).
 
 The single payout mechanism is PPLNS, which favors loyal pool miners.
 
 I have no plans to add any other payout mechanisms or other coins. Work should
-ideally stay focussed on performance and stability.
+stay focussed on performance, efficiency and stability.
 
 ## Project status
 
-Definitely "alpha". I have tested quite a bit on the Monero testnet (if you plan
+I have tested this quite a bit on the Monero testnet (if you plan
 to do the same, ensure to use `--testnet` flag when starting your wallet and
-daemon) and there is certainly room for improvement. Please see the
+daemon) and mainnet, but there is always room for improvement. Please see the
 [TODO](./TODO) file for the current list of things that could do with looking
 at.
 
-There is a reference pool setup at [http://monerop.com](http://monerop.com) so
-it can be load tested further.
+There is also a reference mainnet pool setup and running at
+[http://monerop.com](http://monerop.com).
 
 If you want to help with testing or help setting up your own pool, give me a
 shout on IRC: jtgrassie on Freenode.
@@ -37,19 +38,24 @@ shout on IRC: jtgrassie on Freenode.
 - openssl
 - libmicrohttpd
 - uuid
+- libsodium
 
 As an example, on Ubuntu, the dependencies can be installed with the following
 command:
 
 ```
 sudo apt-get install libjson-c-dev uuid-dev libevent-dev libmicrohttpd-dev \
-  liblmdb-dev libboost-all-dev openssl
+  liblmdb-dev libboost-all-dev openssl libsodium-dev
 ```
+
+There may also be other [Monero
+dependencies](https://github.com/monero-project/monero#dependencies) needed, so
+it doesn't hurt to install those too.
 
 Another obvious dependency is to have a running Monero daemon (`monerod`) and a
 running wallet RPC (`monero-wallet-rpc`) for the pool wallet. It is highly
 recommended to run these on the same host as the pool server to avoid network
-latency.
+latency when their RPC methods are called.
 
 ### Compile
 
@@ -76,14 +82,21 @@ Debug builds are output in `build/debug/`.
 Copy and edit the `pool.conf` file to either the same directory as the compiled
 binary `monero-pool`, or place it in your home directory or launch `monero-pool`
 with the flag `--config-file path/to/pool.conf` to use a custom location. The
-options are self explanatory.
+configuration options should be self explanatory.
 
 ## Running
 
-Ensure you have your daemon and wallet RPC up and running with the correct host
-and port settings in the pool config file.
+Ensure you have your Monero daemon (`monerod`) and wallet RPC
+(`monero-wallet-rpc`) up and running with the correct host and port settings as
+defined in the pool config file.
 
 Then simply `cd build/debug|release` and run `./monero-pool`.
+
+## Web UI
+
+There is a minimal web UI that gets served on the port specified in the config
+file. It's advisable to use either Apache or Nginx as a proxy in front of this
+with some appropriate caching.
 
 ## Supporting the project
 

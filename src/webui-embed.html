@@ -12,13 +12,16 @@
                 font-weight: bold;
                 padding-bottom: 1em;
             }
+            form {
+                padding-bottom: 1em;
+            }
             .wallet {
                 display: none;
             }
         </style>
     </head>
     <body>
-        <header>THE Monero Mining Pool</header>
+        <header>Monero Mining Pool</header>
         <table>
             <tr><td>Pool HR: </td><td id="pool_hashrate"></td></tr>
             <tr><td>Network HR: </td><td id="network_hashrate"></td></tr>
@@ -35,6 +38,7 @@
             Your wallet address: <input type="text" id="wa" name="address" />
             <input type="submit" value="Submit" />
         </form>
+        <small><a href="https://github.com/jtgrassie/monero-pool">https://github.com/jtgrassie/monero-pool</a></small>
         <script>
             function format_last_block(last)
             {
