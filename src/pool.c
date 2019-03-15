@@ -1030,11 +1030,11 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
     }
     else
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
+        snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
                 "\"client_pool_offset\":%d,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
-                "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
+                "\"status\":\"OK\"}}\n", client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
     }
@@ -1059,10 +1059,10 @@ stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
     }
     else
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
+        snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\","
                 "\"height\":%"PRIu64"}}\n",
-                json_id, client_id, blob, job_id, target_hex, height);
+                client_id, blob, job_id, target_hex, height);
     }
     return body;
 }
