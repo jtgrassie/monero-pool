@@ -1022,8 +1022,8 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
-                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
-                "\"client_pool_offset\":%d,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
+                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
+                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1032,8 +1032,8 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
-                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%d,\"client_nonce_offset\":%d,"
-                "\"client_pool_offset\":%d,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
+                "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
+                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
                 "\"status\":\"OK\"}}\n", client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1831,7 +1831,7 @@ client_on_submit(json_object *message, client_t *client)
     if (!job)
         return send_validation_error(client, "cannot find job with job_id");
 
-    log_trace("Client submitted nonce=%d, result=%s", result_nonce, result_hex);
+    log_trace("Client submitted nonce=%u, result=%s", result_nonce, result_hex);
     /*
       1. Validate submission
          active_job->blocktemplate_blob to bin
@@ -1888,7 +1888,7 @@ client_on_submit(json_object *message, client_t *client)
     *psub++ = worker_nonce;
 
     psub -= 4;
-    log_trace("Submission reserved values: %d %d %d %d", *psub, *(psub+1), *(psub+2), *(psub+3));
+    log_trace("Submission reserved values: %u %u %u %u", *psub, *(psub+1), *(psub+2), *(psub+3));
 
     /* Check not already submitted */
     uint128_t *submissions = job->submissions;
@@ -2260,10 +2260,10 @@ read_config(const char *config_file, const char *log_file)
         log_fatal("Both wallet-rpc-host and wallet-rpc-port need setting. Aborting.");
         abort();
     }
-    log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %d\n  rpc_timeout = %d\n  pool_wallet = %s\n  "
-            "pool_start_diff = %d\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
-            "wallet_rpc_host = %s\n  wallet_rpc_port = %d\n  pool_port = %d\n  "
-            "log_level = %d\n  webui_port=%d\n  log-file = %s\n",
+    log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  rpc_timeout = %u\n  pool_wallet = %s\n  "
+            "pool_start_diff = %u\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
+            "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
+            "log_level = %u\n  webui_port=%u\n  log-file = %s\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
