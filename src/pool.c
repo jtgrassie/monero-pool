@@ -1812,10 +1812,10 @@ client_on_submit(json_object *message, client_t *client)
     char *endptr = NULL;
     const char *nptr = json_object_get_string(nonce);
     errno = 0;
-    long int li = strtol(nptr, &endptr, 16);
+    unsigned long int uli = strtoul(nptr, &endptr, 16);
     if (errno != 0 || nptr == endptr)
-        return send_validation_error(client, "nonce not a long int");
-    const uint32_t result_nonce = ntohl(li);
+        return send_validation_error(client, "nonce not an unsigned long int");
+    const uint32_t result_nonce = ntohl(uli);
 
     const char *result_hex = json_object_get_string(result);
     if (strlen(result_hex) != 64)
@@ -1860,8 +1860,7 @@ client_on_submit(json_object *message, client_t *client)
     /* Set the extra nonce in our reserved space */
     char *p = block;
     p += bt->reserved_offset;
-    uint32_t en = job->extra_nonce;
-    memcpy(p, &en, sizeof(extra_nonce));
+    memcpy(p, &job->extra_nonce, sizeof(extra_nonce));
 
     uint32_t pool_nonce = 0;
     uint32_t worker_nonce = 0;
