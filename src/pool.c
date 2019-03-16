@@ -2072,6 +2072,12 @@ client_on_read(struct bufferevent *bev, void *ctx)
         {
             client_send_job(client, false);
         }
+        else if (strcmp(method, "keepalived") == 0)
+        {
+            char *body = stratum_new_status_body(client->json_id, "KEEPALIVED");
+            evbuffer_add(output, body, strlen(body));
+            free(body);
+        }
         else
         {
             char *body = stratum_new_error_body(client->json_id, unknown);
