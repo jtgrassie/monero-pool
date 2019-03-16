@@ -6,18 +6,28 @@ ifeq ($(MAKECMDGOALS),release)
 TYPE = release
 endif
 
-ifeq ($(MAKECMDGOALS),profile)
-TYPE = profile
-endif
+MONERO_INC = ${MONERO_ROOT}/src ${MONERO_ROOT}/external/easylogging++ ${MONERO_ROOT}/contrib/epee/include
 
-DIRS = src data rxi/log/src monero monero/epee/include monero/epee/src monero/common monero/crypto \
-       monero/cryptonote_basic monero/cryptonote_core monero/device monero/ringdt monero/easylogging++
+MONERO_LIBS = \
+  ${MONERO_BUILD_ROOT}/src/cryptonote_basic/libcryptonote_basic.a \
+  ${MONERO_BUILD_ROOT}/src/cryptonote_core/libcryptonote_core.a \
+  ${MONERO_BUILD_ROOT}/src/crypto/libcncrypto.a \
+  ${MONERO_BUILD_ROOT}/src/common/libcommon.a \
+  ${MONERO_BUILD_ROOT}/src/ringct/libringct.a \
+  ${MONERO_BUILD_ROOT}/src/ringct/libringct_basic.a \
+  ${MONERO_BUILD_ROOT}/src/device/libdevice.a \
+  ${MONERO_BUILD_ROOT}/src/blockchain_db/libblockchain_db.a \
+  ${MONERO_BUILD_ROOT}/external/unbound/libunbound.a \
+  ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
+  ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a
+
+DIRS = src data rxi/log/src
 
 OS := $(shell uname -s)
 
 CPPDEFS = _GNU_SOURCE AUTO_INITIALIZE_EASYLOGGINGPP LOG_USE_COLOR
 
-CCPARAM = -Wall $(CFLAGS) -maes
+CCPARAM = -Wall $(CFLAGS) -maes -fPIC
 CXXFLAGS = -std=c++11
 
 ifeq ($(OS), Darwin)
@@ -26,19 +36,14 @@ CPPDEFS += HAVE_MEMSET_S
 endif
 
 ifeq ($(OS),Darwin)
-LDPARAM = -flat_namespace -undefined warning
+LDPARAM = 
 else
-LDPARAM = -rdynamic -Wl,-warn-unresolved-symbols
+LDPARAM = -rdynamic -Wl,-warn-unresolved-symbols -fPIC -pie
 endif
 
 ifeq ($(TYPE),debug)
 CCPARAM += -g
 CPPDEFS += DEBUG
-endif
-
-ifeq ($(TYPE),profile)
-LDPARAM = -pg /lib/libc.so.5
-CCPARAM += -pg
 endif
 
 ifeq ($(TYPE), release)
@@ -50,11 +55,11 @@ endif
 
 LDPARAM += $(LDFLAGS)
 
-LIBS := lmdb pthread microhttpd
+LIBS := lmdb pthread microhttpd sodium
 ifeq ($(OS), Darwin)
-LIBS += c++ boost_system-mt boost_date_time-mt
+LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
 else
-LIBS += boost_system boost_date_time uuid
+LIBS += boost_system boost_date_time boost_chrono boost_filesystem boost_thread uuid
 endif
 
 PKG_LIBS := $(shell pkg-config \
@@ -67,7 +72,7 @@ PKG_LIBS := $(shell pkg-config \
 STATIC_LIBS = 
 DLIBS =
 
-INCPATH := $(DIRS) /opt/local/include /usr/local/include
+INCPATH := $(DIRS) ${MONERO_INC} /opt/local/include /usr/local/include
 
 PKG_INC := $(shell pkg-config \
     libevent \
@@ -99,14 +104,12 @@ CDFILES := $(addprefix $(STORE)/,$(CSOURCE:.c=.d))
 SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 
-.PHONY: clean backup dirs debug release profile
+.PHONY: clean backup dirs debug release preflight
 
-$(TARGET): dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
+$(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
-	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
+	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(MONERO_LIBS) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
 	@cp pool.conf $(STORE)/
-
-debug release profile: $(TARGET)
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
@@ -138,6 +141,8 @@ $(STORE)/%.o: %.html
 # Empty rule to prevent problems when a header is deleted.
 %.h: ;
 
+debug release : $(TARGET)
+
 clean:
 	@echo Making clean.
 	@find ./build -type f -name '*.o' -delete
@@ -151,6 +156,14 @@ backup:
 dirs:
 	@-if [ ! -e $(STORE) ]; then mkdir -p $(STORE); fi;
 	@-$(foreach DIR,$(DIRS), if [ ! -e $(STORE)/$(DIR) ]; then mkdir -p $(STORE)/$(DIR); fi; )
+
+preflight:
+ifeq ($(origin MONERO_ROOT), undefined)
+	$(error You need to set an environment variable MONERO_ROOT to your monero repository root)
+endif
+ifeq ($(origin MONERO_BUILD_ROOT), undefined)
+	$(error You need to set an environment variable MONERO_BUILD_ROOT to your monero build root)
+endif
 
 -include $(DFILES)
 -include $(CDFILES)
