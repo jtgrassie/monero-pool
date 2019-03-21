@@ -12,7 +12,7 @@
                 font-weight: bold;
                 padding-bottom: 1em;
             }
-            form {
+            table {
                 padding-bottom: 1em;
             }
             .wallet {
@@ -33,11 +33,16 @@
             <tr><td>Miners connected: </td><td id="connected_miners"></td></tr>
             <tr class="wallet"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
             <tr class="wallet"><td>Balance due: </td><td id="miner_balance"></td></tr>
+            <tr>
+                <td>Miner address: </td>
+                <td>
+                    <form>
+                        <input type="text" id="wa" name="wa" size="8" />
+                        <input type="submit" value="Submit" />
+                    </form>
+                </td>
+            </tr>
         </table>
-        <form>
-            Your wallet address: <input type="text" id="wa" name="address" />
-            <input type="submit" value="Submit" />
-        </form>
         <small><a href="https://github.com/jtgrassie/monero-pool">https://github.com/jtgrassie/monero-pool</a></small>
         <script>
             function format_last_block(last)
@@ -68,13 +73,18 @@
                     return parseFloat(hr/1000000000000).toFixed(2) + " GH/s";
             }
 
+            var f = document.querySelector("form");
+            var wa = document.querySelector("#wa");
             var xhr = new XMLHttpRequest();
+
             xhr.onload = function()
             {
                 var stats = JSON.parse(xhr.responseText);
                 for (var e in stats)
                 {
                     var el = document.querySelector("#"+e);
+                    if (!el)
+                        continue;
                     if (e == "last_block_found")
                         el.innerHTML = format_last_block(stats[e]);
                     else if (/hashrate/.test(e))
@@ -84,8 +94,6 @@
                 }
             };
 
-            var f = document.querySelector("form");            
-            var wa = document.querySelector("#wa");            
             f.onsubmit = function(e)
             {
                 e.preventDefault();
@@ -95,6 +103,7 @@
                 window.location.reload();
                 return false;
             };
+
             window.onload = function()
             {
                 if (/wa=[0-9a-fA-F]+/.test(document.cookie))
