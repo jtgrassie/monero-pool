@@ -61,6 +61,7 @@ PKG_LIBS := $(shell pkg-config \
     libevent \
     json-c \
     openssl \
+    libsodium \
     --libs)
 
 STATIC_LIBS = 
@@ -72,6 +73,7 @@ PKG_INC := $(shell pkg-config \
     libevent \
     json-c \
     openssl \
+    libsodium \
     --cflags)
 
 LIBPATH := /opt/local/lib/ /usr/local/lib
