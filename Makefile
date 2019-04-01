@@ -55,7 +55,7 @@ endif
 
 LDPARAM += $(LDFLAGS)
 
-LIBS := lmdb pthread microhttpd sodium
+LIBS := lmdb pthread microhttpd
 ifeq ($(OS), Darwin)
 LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
 else

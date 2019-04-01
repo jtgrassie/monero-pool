@@ -31,35 +31,38 @@ shout on IRC: jtgrassie on Freenode.
 
 ### Dependencies
 
+The build system now requires the Monero source tree to be cloned and compiled.
+Follow the
+[instructions](https://github.com/monero-project/monero#compiling-monero-from-source)
+for compiling Monero, then export the following variables:
+
+```bash
+export MONERO_ROOT=/path/to/cloned/monero
+export MONERO_BUILD_ROOT=$MONERO_ROOT/build/<system>/<branch>/<release|debug>
+```
+
+Replacing the values appropriately.
+
+Beyond the Monero dependencies, the following libraries are also required to
+build the pool:
+
 - liblmdb
 - libevent
 - json-c
-- boost
 - openssl
 - libmicrohttpd
 - uuid
-- libsodium
 
-As an example, on Ubuntu, the dependencies can be installed with the following
+As an example, on Ubuntu, these dependencies can be installed with the following
 command:
 
 ```
 sudo apt-get install libjson-c-dev uuid-dev libevent-dev libmicrohttpd-dev \
-  liblmdb-dev libboost-all-dev openssl libsodium-dev
+  liblmdb-dev openssl
 ```
-
-There may also be other [Monero
-dependencies](https://github.com/monero-project/monero#dependencies) needed, so
-it doesn't hurt to install those too.
-
-Another obvious dependency is to have a running Monero daemon (`monerod`) and a
-running wallet RPC (`monero-wallet-rpc`) for the pool wallet. It is highly
-recommended to run these on the same host as the pool server to avoid network
-latency when their RPC methods are called.
-
 ### Compile
 
-First install all the dependencies.
+First install all the dependencies as described above.
 
 Then to compile the pool as a release build, run:
 
@@ -89,6 +92,9 @@ configuration options should be self explanatory.
 Ensure you have your Monero daemon (`monerod`) and wallet RPC
 (`monero-wallet-rpc`) up and running with the correct host and port settings as
 defined in the pool config file.
+
+It is highly recommended to run these on the same host as the pool server to
+avoid network latency when their RPC methods are called.
 
 Then simply `cd build/debug|release` and run `./monero-pool`.
 
