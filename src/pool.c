@@ -978,12 +978,16 @@ target_to_hex(uint64_t target, char *target_hex)
 {
     memset(target_hex, '0', 8);
     BIGNUM *res = BN_new();
-    BIGNUM *bnt = NULL;
-    char st[96];
-    snprintf(st, 96, "%"PRIu64, target);
+    BIGNUM *bnt = BN_new();
+#ifdef SIXTY_FOUR_BIT_LONG
+    BN_set_word(bnt, target);
+#else
+    char st[24];
+    snprintf(st, 24, "%"PRIu64, target);
     BN_dec2bn(&bnt, st);
+#endif
     BN_div(res, NULL, base_diff, bnt, bn_ctx);
-    unsigned char bnb[64];
+    unsigned char bnb[32];
     BN_bn2bin(res, &bnb[0]);
     size_t cc = 4 - (32 - BN_num_bytes(res));
 
