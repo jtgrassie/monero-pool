@@ -976,8 +976,11 @@ pool_clients_send_job()
 static void
 target_to_hex(uint64_t target, char *target_hex)
 {
-    memset(target_hex, '0', 8);
-    BIGNUM *res = BN_new();
+    if (target & 0xFFFFFFFF00000000)
+    {
+        log_warn("Target too high: %"PRIu64, target);
+    }
+    BIGNUM *diff = BN_new();
     BIGNUM *bnt = BN_new();
 #ifdef SIXTY_FOUR_BIT_LONG
     BN_set_word(bnt, target);
@@ -986,28 +989,12 @@ target_to_hex(uint64_t target, char *target_hex)
     snprintf(st, 24, "%"PRIu64, target);
     BN_dec2bn(&bnt, st);
 #endif
-    BN_div(res, NULL, base_diff, bnt, bn_ctx);
-    unsigned char bnb[32];
-    BN_bn2bin(res, &bnb[0]);
-    size_t cc = 4 - (32 - BN_num_bytes(res));
-
+    BN_div(diff, NULL, base_diff, bnt, bn_ctx);
+    BN_rshift(diff, diff, 224);
+    uint32_t w = BN_get_word(diff);
+    bin_to_hex((const char*)&w, 4, &target_hex[0]);
     BN_free(bnt);
-    BN_free(res);
-
-    if (cc > 4 || cc == 0)
-    {
-        log_warn("Requested target too big/small: %"PRIu64, target);
-        target_hex[1] = '1';
-        return;
-    }
-
-    char *ph = &target_hex[0];
-    while (cc)
-    {
-        char c = bnb[--cc];
-        bin_to_hex((const char*)&c, 1, ph++);
-        ph++;
-    }
+    BN_free(diff);
 }
 
 static char *
