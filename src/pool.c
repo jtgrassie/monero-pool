@@ -121,7 +121,7 @@ typedef struct config_t
     char wallet_rpc_host[256];
     uint32_t wallet_rpc_port;
     char pool_wallet[ADDRESS_MAX];
-    uint32_t pool_start_diff;
+    uint64_t pool_start_diff;
     float share_mul;
     float pool_fee;
     float payment_threshold;
@@ -978,7 +978,10 @@ target_to_hex(uint64_t target, char *target_hex)
 {
     if (target & 0xFFFFFFFF00000000)
     {
-        log_warn("Target too high: %"PRIu64, target);
+        log_debug("High target requested: %"PRIu64, target);
+        bin_to_hex((const char*)&target, 8, &target_hex[0]);
+        target_hex[16] = '\0';
+        return;
     }
     BIGNUM *diff = BN_new();
     BIGNUM *bnt = BN_new();
@@ -993,6 +996,7 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_rshift(diff, diff, 224);
     uint32_t w = BN_get_word(diff);
     bin_to_hex((const char*)&w, 4, &target_hex[0]);
+    target_hex[8] = '\0';
     BN_free(bnt);
     BN_free(diff);
 }
@@ -1004,7 +1008,7 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
 {
     char *body = calloc(CLIENT_BODY_MAX, sizeof(char));
 
-    char target_hex[9];
+    char target_hex[17];
     target_to_hex(target, &target_hex[0]);
 
     const block_template_t *bt = block_template;
@@ -1014,7 +1018,7 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
-                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
+                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1024,7 +1028,7 @@ stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_i
         snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
-                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%.8s\"},"
+                "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
                 "\"status\":\"OK\"}}\n", client_id, template_blob, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
@@ -1038,20 +1042,20 @@ stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
 {
     char *body = calloc(CLIENT_BODY_MAX, sizeof(char));
 
-    char target_hex[9];
+    char target_hex[17];
     target_to_hex(target, &target_hex[0]);
 
     if (response)
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{"
-                "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\",\"height\":%"PRIu64"},"
+                "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\",\"height\":%"PRIu64"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, blob, job_id, target_hex, height);
     }
     else
     {
         snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
-                ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%.8s\","
+                ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\","
                 "\"height\":%"PRIu64"}}\n",
                 client_id, blob, job_id, target_hex, height);
     }
@@ -2210,7 +2214,7 @@ read_config(const char *config_file, const char *log_file)
         }
         else if (strcmp(key, "pool-start-diff") == 0)
         {
-            config.pool_start_diff = atoi(val);
+            config.pool_start_diff = strtoumax(val, NULL, 10);
         }
         else if (strcmp(key, "share-mul") == 0)
         {
@@ -2257,7 +2261,7 @@ read_config(const char *config_file, const char *log_file)
         abort();
     }
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  rpc_timeout = %u\n  pool_wallet = %s\n  "
-            "pool_start_diff = %u\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
+            "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
             "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
             "log_level = %u\n  webui_port=%u\n  log-file = %s\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
