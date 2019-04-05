@@ -2074,10 +2074,14 @@ client_on_read(struct bufferevent *bev, void *ctx)
     input = bufferevent_get_input(bev);
     output = bufferevent_get_output(bev);
 
-    if (evbuffer_get_length(input) >= MAX_LINE)
+    size_t len = evbuffer_get_length(input);
+    if (len >= MAX_LINE)
     {
         const char *too_long = "Message too long\n";
         evbuffer_add(output, too_long, strlen(too_long));
+        log_info("Removing client. Message too long.");
+        evbuffer_drain(input, len);
+        client_clear(bev);
         return;
     }
 
@@ -2090,11 +2094,11 @@ client_on_read(struct bufferevent *bev, void *ctx)
         const char unknown[] = "Unknown method";
         client->json_id = json_object_get_int(id);
 
+        bool unknown_message = false;
+
         if (method_name == NULL)
         {
-            char *body = stratum_new_error_body(client->json_id, unknown);
-            evbuffer_add(output, body, strlen(body));
-            free(body);
+            unknown_message = true;
         }
         else if (strcmp(method_name, "login") == 0)
         {
@@ -2116,13 +2120,22 @@ client_on_read(struct bufferevent *bev, void *ctx)
         }
         else
         {
-            char *body = stratum_new_error_body(client->json_id, unknown);
-            evbuffer_add(output, body, strlen(body));
-            free(body);
+            unknown_message = true;
         }
 
         json_object_put(message);
         free(line);
+
+        if (unknown_message)
+        {
+            char *body = stratum_new_error_body(client->json_id, unknown);
+            evbuffer_add(output, body, strlen(body));
+            free(body);
+            log_info("Removing client. Unknown message.");
+            evbuffer_drain(input, len);
+            client_clear(bev);
+            return;
+        }
     }
 }
 
