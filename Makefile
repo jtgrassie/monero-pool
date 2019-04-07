@@ -54,7 +54,7 @@ endif
 
 LDPARAM += $(LDFLAGS)
 
-LIBS := lmdb pthread microhttpd
+LIBS := lmdb pthread microhttpd unbound
 ifeq ($(OS), Darwin)
 LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
 else
@@ -66,7 +66,6 @@ PKG_LIBS := $(shell pkg-config \
     json-c \
     openssl \
     libsodium \
-    libunbound \
     --libs)
 
 STATIC_LIBS = 
@@ -79,7 +78,6 @@ PKG_INC := $(shell pkg-config \
     json-c \
     openssl \
     libsodium \
-    libunbound \
     --cflags)
 
 LIBPATH := /opt/local/lib/ /usr/local/lib
