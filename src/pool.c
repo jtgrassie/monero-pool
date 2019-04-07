@@ -236,7 +236,7 @@ static void client_send_job(client_t *client, bool response);
 static void client_clear_jobs(client_t *client);
 static job_t * client_find_job(client_t *client, const char *job_id);
 static void response_to_block_template(json_object *result, block_template_t *block_template);
-static void response_to_block(json_object *result, block_t *block);
+static void response_to_block(json_object *block_header, block_t *block);
 static char * rpc_new_request_body(const char* method, char* fmt, ...);
 static void rpc_on_response(struct evhttp_request *req, void *arg);
 static void rpc_request(struct event_base *base, const char *body, rpc_callback_t *callback);
@@ -282,6 +282,16 @@ static FILE *fd_log;
         return send_validation_error(client, #name " not found");    \
     if (!json_object_is_type(name, type))                            \
         return send_validation_error(client, #name " not a " #type);
+
+#define JSON_GET_OR_WARN(name, parent, type)                         \
+    json_object *name = NULL;                                        \
+    if (!json_object_object_get_ex(parent, #name, &name)) {          \
+        log_warn(#name " not found");                                \
+    } else {                                                         \
+        if (!json_object_is_type(name, type)) {                      \
+            log_warn(#name " not a " #type);                         \
+        }                                                            \
+    }
 
 static int
 compare_uint64(const MDB_val *a, const MDB_val *b)
@@ -1083,27 +1093,38 @@ stratum_new_status_body(int json_id, const char *status)
 static void
 response_to_block_template(json_object *result, block_template_t *block_template)
 {
-    block_template->blockhashing_blob = strdup(json_object_get_string(json_object_object_get(result, "blockhashing_blob")));
-    block_template->blocktemplate_blob = strdup(json_object_get_string(json_object_object_get(result, "blocktemplate_blob")));
-    block_template->difficulty = json_object_get_int64(json_object_object_get(result, "difficulty"));
-    block_template->height = json_object_get_int64(json_object_object_get(result, "height"));
-    memcpy(block_template->prev_hash, json_object_get_string(json_object_object_get(result, "prev_hash")), 64);
-    block_template->reserved_offset = json_object_get_int(json_object_object_get(result, "reserved_offset"));
+    JSON_GET_OR_WARN(blockhashing_blob, result, json_type_string);
+    JSON_GET_OR_WARN(blocktemplate_blob, result, json_type_string);
+    JSON_GET_OR_WARN(difficulty, result, json_type_int);
+    JSON_GET_OR_WARN(height, result, json_type_int);
+    JSON_GET_OR_WARN(prev_hash, result, json_type_string);
+    JSON_GET_OR_WARN(reserved_offset, result, json_type_int);
+    block_template->blockhashing_blob = strdup(json_object_get_string(blockhashing_blob));
+    block_template->blocktemplate_blob = strdup(json_object_get_string(blocktemplate_blob));
+    block_template->difficulty = json_object_get_int64(difficulty);
+    block_template->height = json_object_get_int64(height);
+    memcpy(block_template->prev_hash, json_object_get_string(prev_hash), 64);
+    block_template->reserved_offset = json_object_get_int(reserved_offset);
 }
 
 static void
-response_to_block(json_object *result, block_t *block)
+response_to_block(json_object *block_header, block_t *block)
 {
     memset(block, 0, sizeof(block_t));
-    json_object *block_header = json_object_object_get(result, "block_header");
-    block->height = json_object_get_int64(json_object_object_get(block_header, "height"));
-    block->difficulty = json_object_get_int64(json_object_object_get(block_header, "difficulty"));
-    memcpy(block->hash, json_object_get_string(json_object_object_get(block_header, "hash")), 64);
-    memcpy(block->prev_hash, json_object_get_string(json_object_object_get(block_header, "prev_hash")), 64);
-    block->timestamp = json_object_get_int64(json_object_object_get(block_header, "timestamp"));
-    block->reward = json_object_get_int64(json_object_object_get(block_header, "reward"));
-    int orphan_status = json_object_get_int64(json_object_object_get(block_header, "orphan_status"));
-    if (orphan_status)
+    JSON_GET_OR_WARN(height, block_header, json_type_int);
+    JSON_GET_OR_WARN(difficulty, block_header, json_type_int);
+    JSON_GET_OR_WARN(hash, block_header, json_type_string);
+    JSON_GET_OR_WARN(prev_hash, block_header, json_type_string);
+    JSON_GET_OR_WARN(timestamp, block_header, json_type_int);
+    JSON_GET_OR_WARN(reward, block_header, json_type_int);
+    JSON_GET_OR_WARN(orphan_status, block_header, json_type_boolean);
+    block->height = json_object_get_int64(height);
+    block->difficulty = json_object_get_int64(difficulty);
+    memcpy(block->hash, json_object_get_string(hash), 64);
+    memcpy(block->prev_hash, json_object_get_string(prev_hash), 64);
+    block->timestamp = json_object_get_int64(timestamp);
+    block->reward = json_object_get_int64(reward);
+    if (json_object_get_int(orphan_status))
         block->status |= BLOCK_ORPHANED;
 }
 
@@ -1226,39 +1247,35 @@ static void
 rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
 {
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
-    const char *status = json_object_get_string(json_object_object_get(result, "status"));
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(status, result, json_type_string);
+    const char *ss = json_object_get_string(status);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_warn("Error (%d) getting block headers by range: %s", ec, em);
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(status, "OK") != 0)
+    if (status == NULL || strcmp(ss, "OK") != 0)
     {
-        log_warn("Error getting block headers by range: %s", status);
+        log_warn("Error getting block headers by range: %s", ss);
         json_object_put(root);
         return;
     }
 
-    json_object *headers = json_object_object_get(result, "headers");
+    JSON_GET_OR_WARN(headers, result, json_type_array);
     size_t headers_len = json_object_array_length(headers);
     for (int i=0; i<headers_len; i++)
     {
         json_object *header = json_object_array_get_idx(headers, i);
         block_t *bh = &block_headers_range[i];
-        memcpy(bh->hash, json_object_get_string(json_object_object_get(header, "hash")), 64);
-        memcpy(bh->prev_hash, json_object_get_string(json_object_object_get(header, "prev_hash")), 64);
-        bh->height = json_object_get_int64(json_object_object_get(header, "height"));
-        bh->difficulty = json_object_get_int64(json_object_object_get(header, "difficulty"));
-        bh->reward = json_object_get_int64(json_object_object_get(header, "reward"));
-        bh->timestamp = json_object_get_int64(json_object_object_get(header, "timestamp"));
-        int orphan_status = json_object_get_int64(json_object_object_get(header, "orphan_status"));
-        if (orphan_status)
-            bh->status |= BLOCK_ORPHANED;
+        response_to_block(header, bh);
     }
     process_blocks(block_headers_range, BLOCK_HEADERS_RANGE);
     json_object_put(root);
@@ -1269,25 +1286,30 @@ rpc_on_block_header_by_height(const char* data, rpc_callback_t *callback)
 {
     log_trace("Got block header by height: \n%s", data);
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
-    const char *status = json_object_get_string(json_object_object_get(result, "status"));
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(status, result, json_type_string);
+    const char *ss = json_object_get_string(status);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_error("Error (%d) getting block header by height: %s", ec, em);
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(status, "OK") != 0)
+    if (status == NULL || strcmp(ss, "OK") != 0)
     {
-        log_error("Error getting block header by height: %s", status);
+        log_error("Error getting block header by height: %s", ss);
         json_object_put(root);
         return;
     }
     block_t rb;
-    response_to_block(result, &rb);
+    JSON_GET_OR_WARN(block_header, result, json_type_object);
+    response_to_block(block_header, &rb);
     process_blocks(&rb, 1);
     json_object_put(root);
 }
@@ -1297,20 +1319,24 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
 {
     log_trace("Got block template: \n%s", data);
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
-    const char *status = json_object_get_string(json_object_object_get(result, "status"));
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(status, result, json_type_string);
+    const char *ss = json_object_get_string(status);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_error("Error (%d) getting block template: %s", ec, em);
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(status, "OK") != 0)
+    if (status == NULL || strcmp(ss, "OK") != 0)
     {
-        log_error("Error getting block template: %s", status);
+        log_error("Error getting block template: %s", ss);
         json_object_put(root);
         return;
     }
@@ -1344,26 +1370,31 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
 {
     log_trace("Got last block header: \n%s", data);
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
-    const char *status = json_object_get_string(json_object_object_get(result, "status"));
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(status, result, json_type_string);
+    const char *ss = json_object_get_string(status);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_error("Error (%d) getting last block header: %s", ec, em);
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(status, "OK") != 0)
+    if (status == NULL || strcmp(ss, "OK") != 0)
     {
-        log_error("Error getting last block header: %s", status);
+        log_error("Error getting last block header: %s", ss);
         json_object_put(root);
         return;
     }
     block_t *front = last_block_headers[0];
     block_t *block = calloc(1, sizeof(block_t));
-    response_to_block(result, block);
+    JSON_GET_OR_WARN(block_header, result, json_type_object);
+    response_to_block(block_header, block);
     if (front == NULL)
     {
         startup_pauout(block->height);
@@ -1420,9 +1451,11 @@ static void
 rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
 {
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
-    const char *status = json_object_get_string(json_object_object_get(result, "status"));
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(status, result, json_type_string);
+    const char *ss = json_object_get_string(status);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     /*
       The RPC reports submission as an error even when it's added as
       an alternative block. Thus, still store it. This doesn't matter
@@ -1430,13 +1463,15 @@ rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
     */
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_debug("Error (%d) with block submission: %s", ec, em);
     }
-    if (status == NULL || strcmp(status, "OK") != 0)
+    if (status == NULL || strcmp(ss, "OK") != 0)
     {
-        log_debug("Error submitting block: %s", status);
+        log_debug("Error submitting block: %s", ss);
     }
     pool_stats.pool_blocks_found++;
     block_t *b = (block_t*)callback->data;
@@ -1454,12 +1489,15 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     log_trace("Transfer response: \n%s", data);
     const char* address = callback->data;
     json_object *root = json_tokener_parse(data);
-    json_object *result = json_object_object_get(root, "result");
-    json_object *error = json_object_object_get(root, "error");
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
     if (error != NULL)
     {
-        int ec = json_object_get_int(json_object_object_get(error, "code"));
-        const char *em = json_object_get_string(json_object_object_get(error, "message"));
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
         log_error("Error (%d) with wallet transfer: %s", ec, em);
         goto cleanup;
     }
@@ -1504,12 +1542,14 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     mdb_txn_commit(txn);
 
     /* Now store payment info */
-    const char *tx_hash = json_object_get_string(json_object_object_get(result, "tx_hash"));
-    uint64_t amount = json_object_get_int64(json_object_object_get(result, "amount"));
+    JSON_GET_OR_WARN(tx_hash, result, json_type_string);
+    JSON_GET_OR_WARN(amount, result, json_type_int);
+    const char *ths = json_object_get_string(tx_hash);
+    uint64_t ai = json_object_get_int64(amount);
     time_t now = time(NULL);
     payment_t payment;
-    memcpy(payment.tx_hash, tx_hash, sizeof(payment.tx_hash));
-    payment.amount = amount;
+    memcpy(payment.tx_hash, ths, sizeof(payment.tx_hash));
+    payment.amount = ai;
     payment.timestamp = now;
 
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
@@ -1865,10 +1905,10 @@ client_on_submit(json_object *message, client_t *client)
           A proxy supplies pool_nonce and worker_nonce
           so add them in the resrved space too.
         */
-        pool_nonce = json_object_get_int(
-                        json_object_object_get(params, "poolNonce"));
-        worker_nonce = json_object_get_int(
-                        json_object_object_get(params, "workerNonce"));
+        JSON_GET_OR_WARN(poolNonce, params, json_type_int);
+        JSON_GET_OR_WARN(workerNonce, params, json_type_int);
+        pool_nonce = json_object_get_int(poolNonce);
+        worker_nonce = json_object_get_int(workerNonce);
         p += 8;
         memcpy(p, &pool_nonce, sizeof(pool_nonce));
         p += 4;
@@ -2044,29 +2084,31 @@ client_on_read(struct bufferevent *bev, void *ctx)
     while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF)))
     {
         json_object *message = json_tokener_parse(line);
-        const char *method = json_object_get_string(json_object_object_get(message, "method"));
+        JSON_GET_OR_WARN(method, message, json_type_string);
+        JSON_GET_OR_WARN(id, message, json_type_int);
+        const char *method_name = json_object_get_string(method);
         const char unknown[] = "Unknown method";
-        client->json_id = json_object_get_int(json_object_object_get(message, "id"));
+        client->json_id = json_object_get_int(id);
 
-        if (method == NULL)
+        if (method_name == NULL)
         {
             char *body = stratum_new_error_body(client->json_id, unknown);
             evbuffer_add(output, body, strlen(body));
             free(body);
         }
-        else if (strcmp(method, "login") == 0)
+        else if (strcmp(method_name, "login") == 0)
         {
             client_on_login(message, client);
         }
-        else if (strcmp(method, "submit") == 0)
+        else if (strcmp(method_name, "submit") == 0)
         {
             client_on_submit(message, client);
         }
-        else if (strcmp(method, "getjob") == 0)
+        else if (strcmp(method_name, "getjob") == 0)
         {
             client_send_job(client, false);
         }
-        else if (strcmp(method, "keepalived") == 0)
+        else if (strcmp(method_name, "keepalived") == 0)
         {
             char *body = stratum_new_status_body(client->json_id, "KEEPALIVED");
             evbuffer_add(output, body, strlen(body));
