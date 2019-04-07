@@ -2196,7 +2196,11 @@ read_config(const char *config_file, const char *log_file)
     }
     else
     {
-        getcwd(path, MAX_PATH);
+        if (!getcwd(path, MAX_PATH))
+        {
+            log_fatal("Cannot getcwd (%s). Aborting.", errno);
+            abort();
+        }
         strcat(path, "/pool.conf");
         if (access(path, R_OK) != 0)
         {
