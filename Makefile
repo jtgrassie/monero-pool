@@ -17,7 +17,6 @@ MONERO_LIBS = \
   ${MONERO_BUILD_ROOT}/src/ringct/libringct_basic.a \
   ${MONERO_BUILD_ROOT}/src/device/libdevice.a \
   ${MONERO_BUILD_ROOT}/src/blockchain_db/libblockchain_db.a \
-  ${MONERO_BUILD_ROOT}/external/unbound/libunbound.a \
   ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
   ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a
 
@@ -59,7 +58,7 @@ LIBS := lmdb pthread microhttpd
 ifeq ($(OS), Darwin)
 LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
 else
-LIBS += boost_system boost_date_time boost_chrono boost_filesystem boost_thread uuid
+LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thread uuid
 endif
 
 PKG_LIBS := $(shell pkg-config \
@@ -67,6 +66,7 @@ PKG_LIBS := $(shell pkg-config \
     json-c \
     openssl \
     libsodium \
+    libunbound \
     --libs)
 
 STATIC_LIBS = 
@@ -79,6 +79,7 @@ PKG_INC := $(shell pkg-config \
     json-c \
     openssl \
     libsodium \
+    libunbound \
     --cflags)
 
 LIBPATH := /opt/local/lib/ /usr/local/lib

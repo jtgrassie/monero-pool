@@ -43,13 +43,12 @@ export MONERO_BUILD_ROOT=$MONERO_ROOT/build/<system>/<branch>/<release|debug>
 
 Replacing the values appropriately.
 
-Beyond the Monero dependencies, the following libraries are also required to
-build the pool:
+Beyond the Monero dependencies, the following extra libraries are also required
+to build the pool:
 
 - liblmdb
 - libevent
 - json-c
-- openssl
 - libmicrohttpd
 - uuid
 
@@ -57,8 +56,7 @@ As an example, on Ubuntu, these dependencies can be installed with the following
 command:
 
 ```
-sudo apt-get install libjson-c-dev uuid-dev libevent-dev libmicrohttpd-dev \
-  liblmdb-dev openssl
+sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev libmicrohttpd-dev uuid-dev
 ```
 ### Compile
 
