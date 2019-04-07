@@ -474,9 +474,9 @@ miner_hr(const char *address)
         {
             double d = difftime(time(NULL), c->connected_since);
             if (d == 0.0)
-                break;
-            hr = c->hashes / d;
-            break;
+                continue;
+            hr += c->hashes / d;
+            continue;
         }
     }
     pthread_mutex_unlock(&mutex_clients);
