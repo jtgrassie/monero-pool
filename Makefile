@@ -56,9 +56,9 @@ LDPARAM += $(LDFLAGS)
 
 LIBS := lmdb pthread microhttpd unbound
 ifeq ($(OS), Darwin)
-LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
+LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt boost_regex-mt
 else
-LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thread uuid
+LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thread boost_regex uuid
 endif
 
 PKG_LIBS := $(shell pkg-config \
