@@ -87,6 +87,7 @@ EXTRA_FILES = Makefile
 
 C++ = g++
 CC = gcc
+XXD := $(shell command -v xxd)
 
 STORE = build/$(TYPE)
 SOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.cpp))
@@ -165,6 +166,9 @@ ifeq ($(origin MONERO_BUILD_ROOT), undefined)
 endif
 ifndef PKG_LIBS
 	$(error Missing dependencies)
+endif
+ifndef XXD
+	$(error Command xxd not found)
 endif
 
 -include $(DFILES)
