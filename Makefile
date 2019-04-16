@@ -37,7 +37,7 @@ endif
 ifeq ($(OS),Darwin)
 LDPARAM = 
 else
-LDPARAM = -rdynamic -Wl,-warn-unresolved-symbols -fPIC -pie
+LDPARAM = -Wl,-warn-unresolved-symbols -fPIC -pie
 endif
 
 ifeq ($(TYPE),debug)
@@ -48,7 +48,7 @@ endif
 ifeq ($(TYPE), release)
 CCPARAM += -O3 -Wno-unused-variable
 ifneq ($(OS), Darwin)
-LDPARAM = -rdynamic -Wl,--unresolved-symbols=ignore-in-object-files
+LDPARAM = -Wl,--unresolved-symbols=ignore-in-object-files
 endif
 endif
 
