@@ -163,6 +163,9 @@ endif
 ifeq ($(origin MONERO_BUILD_ROOT), undefined)
 	$(error You need to set an environment variable MONERO_BUILD_ROOT to your monero build root)
 endif
+ifndef PKG_LIBS
+	$(error Missing dependencies)
+endif
 
 -include $(DFILES)
 -include $(CDFILES)
