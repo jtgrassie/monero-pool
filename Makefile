@@ -37,7 +37,7 @@ endif
 ifeq ($(OS),Darwin)
 LDPARAM = 
 else
-LDPARAM = -rdynamic -Wl,-warn-unresolved-symbols -fPIC -pie
+LDPARAM = -Wl,-warn-unresolved-symbols -fPIC -pie
 endif
 
 ifeq ($(TYPE),debug)
@@ -48,7 +48,7 @@ endif
 ifeq ($(TYPE), release)
 CCPARAM += -O3 -Wno-unused-variable
 ifneq ($(OS), Darwin)
-LDPARAM = -rdynamic -Wl,--unresolved-symbols=ignore-in-object-files
+LDPARAM = -Wl,--unresolved-symbols=ignore-in-object-files
 endif
 endif
 
@@ -56,9 +56,9 @@ LDPARAM += $(LDFLAGS)
 
 LIBS := lmdb pthread microhttpd unbound
 ifeq ($(OS), Darwin)
-LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt
+LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt boost_filesystem-mt boost_thread-mt boost_regex-mt
 else
-LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thread uuid
+LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thread boost_regex uuid
 endif
 
 PKG_LIBS := $(shell pkg-config \
@@ -87,6 +87,7 @@ EXTRA_FILES = Makefile
 
 C++ = g++
 CC = gcc
+XXD := $(shell command -v xxd)
 
 STORE = build/$(TYPE)
 SOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.cpp))
@@ -162,6 +163,12 @@ ifeq ($(origin MONERO_ROOT), undefined)
 endif
 ifeq ($(origin MONERO_BUILD_ROOT), undefined)
 	$(error You need to set an environment variable MONERO_BUILD_ROOT to your monero build root)
+endif
+ifndef PKG_LIBS
+	$(error Missing dependencies)
+endif
+ifndef XXD
+	$(error Command xxd not found)
 endif
 
 -include $(DFILES)
