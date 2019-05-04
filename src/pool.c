@@ -1269,6 +1269,7 @@ rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
 
     JSON_GET_OR_WARN(headers, result, json_type_array);
     size_t headers_len = json_object_array_length(headers);
+    assert(headers_len == BLOCK_HEADERS_RANGE);
     for (int i=0; i<headers_len; i++)
     {
         json_object *header = json_object_array_get_idx(headers, i);
