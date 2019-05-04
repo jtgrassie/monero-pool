@@ -68,7 +68,9 @@
 #define MAX_LINE 4096
 #define POOL_CLIENTS_GROW 1024
 #define RPC_BODY_MAX 4096
-#define CLIENT_BODY_MAX 2048
+#define JOB_BODY_MAX 2048
+#define ERROR_BODY_MAX 512
+#define STATUS_BODY_MAX 256
 #define CLIENT_JOBS_MAX 4
 #define BLOCK_HEADERS_MAX 4
 #define BLOCK_TEMPLATES_MAX 4
@@ -222,13 +224,11 @@ static void pool_clients_init();
 static void pool_clients_free();
 static void pool_clients_send_job();
 static void target_to_hex(uint64_t target, char *target_hex);
-static char * stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_id,
-        const block_template_t *block_template, const char *template_blob,
-        uint64_t target, bool response);
-static char * stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
-        const char *blob, uint64_t target, uint64_t height, bool response);
-static char * stratum_new_error_body(int json_id, const char *error);
-static char * stratum_new_status_body(int json_id, const char *status);
+static void stratum_get_proxy_job_body(char *body, const client_t *client,
+        const char *block_hex, bool response);
+static void stratum_get_job_body(char *body, const client_t *client, bool response);
+static inline void stratum_get_error_body(char *body, int json_id, const char *error);
+static inline void stratum_get_status_body(char *body, int json_id, const char *status);
 static void client_add(int fd, struct bufferevent *bev);
 static void client_find(struct bufferevent *bev, client_t **client);
 static void client_clear(struct bufferevent *bev);
@@ -237,7 +237,7 @@ static void client_clear_jobs(client_t *client);
 static job_t * client_find_job(client_t *client, const char *job_id);
 static void response_to_block_template(json_object *result, block_template_t *block_template);
 static void response_to_block(json_object *block_header, block_t *block);
-static char * rpc_new_request_body(const char* method, char* fmt, ...);
+static void rpc_get_request_body(char *body, const char* method, char* fmt, ...);
 static void rpc_on_response(struct evhttp_request *req, void *arg);
 static void rpc_request(struct event_base *base, const char *body, rpc_callback_t *callback);
 static void rpc_wallet_request(struct event_base *base, const char *body, rpc_callback_t *callback);
@@ -869,11 +869,11 @@ startup_pauout(uint64_t height)
         if (block->status & BLOCK_UNLOCKED || block->status & BLOCK_ORPHANED)
             continue;
 
-        char *body = rpc_new_request_body("get_block_header_by_height", "sd", "height", block->height);
+        char body[RPC_BODY_MAX];
+        rpc_get_request_body(body, "get_block_header_by_height", "sd", "height", block->height);
         rpc_callback_t *c = calloc(1, sizeof(rpc_callback_t));
         c->cb = rpc_on_block_header_by_height;
         rpc_request(base, body, c);
-        free(body);
     }
 
     mdb_cursor_close(cursor);
@@ -1009,83 +1009,83 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_free(diff);
 }
 
-static char *
-stratum_new_proxy_job_body(int json_id, const char *client_id, const char *job_id,
-        const block_template_t *block_template, const char *template_blob,
-        uint64_t target, bool response)
+static void
+stratum_get_proxy_job_body(char *body, const client_t *client, const char *block_hex, bool response)
 {
-    char *body = calloc(CLIENT_BODY_MAX, sizeof(char));
-
+    int json_id = client->json_id;
+    const char *client_id = client->client_id;
+    const job_t *job = &client->active_jobs[0];
+    char job_id[33];
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id);
+    uint64_t target = job->target;
     char target_hex[17];
     target_to_hex(target, &target_hex[0]);
-
-    const block_template_t *bt = block_template;
+    const block_template_t *bt = job->block_template;
 
     if (response)
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
+        snprintf(body, JOB_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
                 "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
-                "\"status\":\"OK\"}}\n", json_id, client_id, template_blob, job_id,
+                "\"status\":\"OK\"}}\n", json_id, client_id, block_hex, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
     }
     else
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
+        snprintf(body, JOB_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job\":{\"blocktemplate_blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64",\"reserved_offset\":%u,\"client_nonce_offset\":%u,"
                 "\"client_pool_offset\":%u,\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
-                "\"status\":\"OK\"}}\n", client_id, template_blob, job_id,
+                "\"status\":\"OK\"}}\n", client_id, block_hex, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset, bt->reserved_offset + 12,
                 bt->reserved_offset + 8, target, target_hex);
     }
-    return body;
 }
 
-static char *
-stratum_new_job_body(int json_id, const char *client_id, const char *job_id,
-        const char *blob, uint64_t target, uint64_t height, bool response)
+static void
+stratum_get_job_body(char *body, const client_t *client, bool response)
 {
-    char *body = calloc(CLIENT_BODY_MAX, sizeof(char));
-
+    int json_id = client->json_id;
+    const char *client_id = client->client_id;
+    const job_t *job = &client->active_jobs[0];
+    char job_id[33];
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id);
+    const char *blob = job->blob;
+    uint64_t target = job->target;
+    uint64_t height = job->block_template->height;
     char target_hex[17];
     target_to_hex(target, &target_hex[0]);
 
     if (response)
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
+        snprintf(body, JOB_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{"
                 "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\",\"height\":%"PRIu64"},"
                 "\"status\":\"OK\"}}\n", json_id, client_id, blob, job_id, target_hex, height);
     }
     else
     {
-        snprintf(body, CLIENT_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
+        snprintf(body, JOB_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\","
                 "\"height\":%"PRIu64"}}\n",
                 client_id, blob, job_id, target_hex, height);
     }
-    return body;
 }
 
-static char *
-stratum_new_error_body(int json_id, const char *error)
+static inline void
+stratum_get_error_body(char *body, int json_id, const char *error)
 {
-    char *body = calloc(512, sizeof(char));
-    snprintf(body, 512, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":"
+    snprintf(body, ERROR_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":"
             "{\"code\":-1, \"message\":\"%s\"}}\n", json_id, error);
-    return body;
 }
 
-static char *
-stratum_new_status_body(int json_id, const char *status)
+static inline void
+stratum_get_status_body(char *body, int json_id, const char *status)
 {
-    char *body = calloc(256, sizeof(char));
-    snprintf(body, 256, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\":{\"status\":\"%s\"}}\n",
+    snprintf(body, STATUS_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\",\"error\":null,\"result\":{\"status\":\"%s\"}}\n",
             json_id, status);
-    return body;
 }
 
 static void
@@ -1126,21 +1126,20 @@ response_to_block(json_object *block_header, block_t *block)
         block->status |= BLOCK_ORPHANED;
 }
 
-static char *
-rpc_new_request_body(const char* method, char* fmt, ...)
+static void
+rpc_get_request_body(char *body, const char* method, char* fmt, ...)
 {
-    char *result = calloc(RPC_BODY_MAX, sizeof(char));
-    char *pr = &result[0];
+    char *pb = body;
 
-    snprintf(pr, RPC_BODY_MAX, "%s%s%s", "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"", method, "\"");
-    pr += strlen(pr);
+    snprintf(pb, RPC_BODY_MAX, "%s%s%s", "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"", method, "\"");
+    pb += strlen(pb);
 
     if (fmt && *fmt)
     {
         char *s;
         uint64_t d;
-        snprintf(pr, RPC_BODY_MAX - strlen(result), "%s", ",\"params\":{");
-        pr += strlen(pr);
+        snprintf(pb, RPC_BODY_MAX - strlen(body), "%s", ",\"params\":{");
+        pb += strlen(pb);
         va_list args;
         va_start(args, fmt);
         uint8_t count = 0;
@@ -1150,27 +1149,26 @@ rpc_new_request_body(const char* method, char* fmt, ...)
             {
                 case 's':
                     s = va_arg(args, char *);
-                    snprintf(pr, RPC_BODY_MAX - strlen(result), "\"%s\"", s);
-                    pr += strlen(pr);
+                    snprintf(pb, RPC_BODY_MAX - strlen(body), "\"%s\"", s);
+                    pb += strlen(pb);
                     break;
                 case 'd':
                     d = va_arg(args, uint64_t);
-                    snprintf(pr, RPC_BODY_MAX - strlen(result), "%"PRIu64, d);
-                    pr += strlen(pr);
+                    snprintf(pb, RPC_BODY_MAX - strlen(body), "%"PRIu64, d);
+                    pb += strlen(pb);
                     break;
             }
             char append = ':';
             if (count++ % 2 != 0)
                 append = ',';
-            *pr++ = append;
+            *pb++ = append;
         }
         va_end(args);
-        *--pr = '}';
-        pr++;
+        *--pb = '}';
+        pb++;
     }
-    *pr = '}';
-    log_trace("Payload: %s", result);
-    return result;
+    *pb = '}';
+    log_trace("Payload: %s", body);
 }
 
 static void
@@ -1182,22 +1180,23 @@ rpc_on_response(struct evhttp_request *req, void *arg)
     if (!req)
     {
         log_error("Request failure. Aborting.");
-        return;
+        goto cleanup;
     }
 
     int rc = evhttp_request_get_response_code(req);
     if (rc < 200 || rc >= 300)
     {
         log_error("HTTP status code %d for %s. Aborting.", rc, evhttp_request_get_uri(req));
-        return;
+        goto cleanup;
     }
 
     input = evhttp_request_get_input_buffer(req);
     size_t len = evbuffer_get_length(input);
-    char data[len+1];
+    char *data = (char*) alloca(len+1);
     evbuffer_remove(input, data, len);
     data[len] = '\0';
-    callback->cb(&data[0], callback);
+    callback->cb(data, callback);
+cleanup:
     if (callback->data)
         free(callback->data);
     free(callback);
@@ -1212,6 +1211,7 @@ rpc_request(struct event_base *base, const char *body, rpc_callback_t *callback)
     struct evbuffer *output;
 
     con = evhttp_connection_base_new(base, NULL, config.rpc_host, config.rpc_port);
+    evhttp_connection_free_on_completion(con);
     evhttp_connection_set_timeout(con, config.rpc_timeout);
     req = evhttp_request_new(rpc_on_response, callback);
     output = evhttp_request_get_output_buffer(req);
@@ -1231,6 +1231,7 @@ rpc_wallet_request(struct event_base *base, const char *body, rpc_callback_t *ca
     struct evbuffer *output;
 
     con = evhttp_connection_base_new(base, NULL, config.wallet_rpc_host, config.wallet_rpc_port);
+    evhttp_connection_free_on_completion(con);
     evhttp_connection_set_timeout(con, config.rpc_timeout);
     req = evhttp_request_new(rpc_on_response, callback);
     output = evhttp_request_get_output_buffer(req);
@@ -1428,19 +1429,19 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     if (need_new_template)
     {
         log_info("Fetching new block template");
-        char *body = rpc_new_request_body("get_block_template", "sssd", "wallet_address", config.pool_wallet, "reserve_size", 17);
+        char body[RPC_BODY_MAX];
+        uint64_t reserve = 17;
+        rpc_get_request_body(body, "get_block_template", "sssd", "wallet_address", config.pool_wallet, "reserve_size", reserve);
         rpc_callback_t *c1 = calloc(1, sizeof(rpc_callback_t));
         c1->cb = rpc_on_block_template;
         rpc_request(base, body, c1);
-        free(body);
 
-        uint32_t end = block->height - 60;
-        uint32_t start = end - BLOCK_HEADERS_RANGE + 1;
-        body = rpc_new_request_body("get_block_headers_range", "sdsd", "start_height", start, "end_height", end);
+        uint64_t end = block->height - 60;
+        uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
+        rpc_get_request_body(body, "get_block_headers_range", "sdsd", "start_height", start, "end_height", end);
         rpc_callback_t *c2 = calloc(1, sizeof(rpc_callback_t));
         c2->cb = rpc_on_block_headers_range;
         rpc_request(base, body, c2);
-        free(body);
     }
 
     json_object_put(root);
@@ -1590,11 +1591,11 @@ static void
 timer_on_120s(int fd, short kind, void *ctx)
 {
     log_info("Fetching last block header");
-    char *body = rpc_new_request_body("get_last_block_header", NULL);
+    char body[RPC_BODY_MAX];
+    rpc_get_request_body(body, "get_last_block_header", NULL);
     rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
     callback->cb = rpc_on_last_block_header;
     rpc_request(base, body, callback);
-    free(body);
     struct timeval timeout = { .tv_sec = 120, .tv_usec = 0 };
     evtimer_add(timer_120s, &timeout);
 }
@@ -1746,23 +1747,21 @@ client_send_job(client_t *client, bool response)
     job->target = target;
     log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
 
-    char *body;
+    char body[JOB_BODY_MAX];
     if (!client->is_proxy)
     {
-        body = stratum_new_job_body(client->json_id, client->client_id, job_id,
-            job->blob, target, bt->height, response);
+        stratum_get_job_body(body, client, response);
     }
     else
     {
-        char *template_hex = calloc(bin_size+1, sizeof(char));
-        bin_to_hex(block, bin_size, template_hex);
-        body = stratum_new_proxy_job_body(client->json_id, client->client_id, job_id,
-            bt, template_hex, target, response);
+        char *block_hex = calloc(bin_size+1, sizeof(char));
+        bin_to_hex(block, bin_size, block_hex);
+        stratum_get_proxy_job_body(body, client, block_hex, response);
+        free(block_hex);
     }
     log_trace("Client job: %s", body);
     struct evbuffer *output = bufferevent_get_output(client->bev);
     evbuffer_add(output, body, strlen(body));
-    free(body);
     free(block);
     free(hashing_blob);
 }
@@ -1791,10 +1790,10 @@ static void
 send_validation_error(const client_t *client, const char *message)
 {
     struct evbuffer *output = bufferevent_get_output(client->bev);
-    char *body = stratum_new_error_body(client->json_id, message);
+    char body[ERROR_BODY_MAX];
+    stratum_get_error_body(body, client->json_id, message);
     evbuffer_add(output, body, strlen(body));
     log_debug("Validation error: %s", message);
-    free(body);
 }
 
 static void
@@ -1929,10 +1928,10 @@ client_on_submit(json_object *message, client_t *client)
     {
         if (submissions[i] == sub)
         {
-            char *body = stratum_new_error_body(client->json_id, "Duplicate share");
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, "Duplicate share");
             evbuffer_add(output, body, strlen(body));
             log_debug("Duplicate share");
-            free(body);
             free(block);
             return;
         }
@@ -1951,10 +1950,10 @@ client_on_submit(json_object *message, client_t *client)
     char *hashing_blob = NULL;
     if (get_hashing_blob(block, bin_size, &hashing_blob, &hashing_blob_size) != 0)
     {
-        char *body = stratum_new_error_body(client->json_id, "Invalid block");
+        char body[ERROR_BODY_MAX];
+        stratum_get_error_body(body, client->json_id, "Invalid block");
         evbuffer_add(output, body, strlen(body));
         log_debug("Invalid block");
-        free(body);
         free(block);
         return;
     }
@@ -1969,11 +1968,11 @@ client_on_submit(json_object *message, client_t *client)
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)
     {
-        char *body = stratum_new_error_body(client->json_id, "Invalid share");
+        char body[ERROR_BODY_MAX];
+        stratum_get_error_body(body, client->json_id, "Invalid share");
         evbuffer_add(output, body, strlen(body));
         log_debug("Invalid share");
         /* TODO: record and ban if too many */
-        free(body);
         free(block);
         free(hashing_blob);
         return;
@@ -2004,9 +2003,10 @@ client_on_submit(json_object *message, client_t *client)
         log_info("+++ MINED A BLOCK +++");
         char *block_hex = calloc((bin_size << 1)+1, sizeof(char));
         bin_to_hex(block, bin_size, block_hex);
-        char *body = calloc(RPC_BODY_MAX, sizeof(char));
+        char body[RPC_BODY_MAX];
         snprintf(body, RPC_BODY_MAX,
-                "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"submit_block\", \"params\":[\"%s\"]}", block_hex);
+                "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"submit_block\", \"params\":[\"%s\"]}",
+                block_hex);
 
         rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
         callback->cb = rpc_on_block_submitted;
@@ -2021,16 +2021,15 @@ client_on_submit(json_object *message, client_t *client)
         b->timestamp = now;
 
         rpc_request(base, body, callback);
-        free(body);
         free(block_hex);
     }
     else if (BN_cmp(hd, jd) < 0)
     {
         can_store = false;
-        char *body = stratum_new_error_body(client->json_id, "Low difficulty share");
+        char body[ERROR_BODY_MAX];
+        stratum_get_error_body(body, client->json_id, "Low difficulty share");
         log_debug("Low difficulty (%lu) share", BN_get_word(jd));
         evbuffer_add(output, body, strlen(body));
-        free(body);
     }
     else
         can_store = true;
@@ -2052,9 +2051,9 @@ client_on_submit(json_object *message, client_t *client)
         int rc = store_share(share.height, &share);
         if (rc != 0)
             log_warn("Failed to store share: %s", mdb_strerror(rc));
-        char *body = stratum_new_status_body(client->json_id, "OK");
+        char body[STATUS_BODY_MAX];
+        stratum_get_status_body(body, client->json_id, "OK");
         evbuffer_add(output, body, strlen(body));
-        free(body);
     }
 }
 
@@ -2091,9 +2090,9 @@ client_on_read(struct bufferevent *bev, void *ctx)
 
         if (method_name == NULL)
         {
-            char *body = stratum_new_error_body(client->json_id, unknown);
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, unknown);
             evbuffer_add(output, body, strlen(body));
-            free(body);
         }
         else if (strcmp(method_name, "login") == 0)
         {
@@ -2109,15 +2108,15 @@ client_on_read(struct bufferevent *bev, void *ctx)
         }
         else if (strcmp(method_name, "keepalived") == 0)
         {
-            char *body = stratum_new_status_body(client->json_id, "KEEPALIVED");
+            char body[STATUS_BODY_MAX];
+            stratum_get_status_body(body, client->json_id, "KEEPALIVED");
             evbuffer_add(output, body, strlen(body));
-            free(body);
         }
         else
         {
-            char *body = stratum_new_error_body(client->json_id, unknown);
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, unknown);
             evbuffer_add(output, body, strlen(body));
-            free(body);
         }
 
         json_object_put(message);
