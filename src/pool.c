@@ -1424,6 +1424,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
 
     pool_stats.network_difficulty = last_block_headers[0]->difficulty;
     pool_stats.network_hashrate = last_block_headers[0]->difficulty / BLOCK_TIME;
+    pool_stats.network_height = last_block_headers[0]->height;
     update_pool_hr();
 
     if (need_new_template)
