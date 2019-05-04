@@ -67,21 +67,6 @@ int get_hashing_blob(const char *input, const size_t in_size, char **output, siz
     return 0;
 }
 
-int construct_block_blob(const char *block_data, uint64_t nonce, char **blob)
-{
-    struct block b = AUTO_VAL_INIT(b);
-    blobdata bd = block_data;
-    if (!parse_and_validate_block_from_blob(bd, b))
-        return -1;
-    b.nonce = nonce;
-    bd = "";
-    if (!block_to_blob(b, bd))
-        return -2;
-    *blob = (char*) malloc(bd.size());
-    memcpy(*blob, bd.data(), bd.length());
-    return 0;
-}
-
 int parse_address(const char *input, uint64_t *prefix)
 {
     uint64_t tag;
@@ -97,10 +82,5 @@ int parse_address(const char *input, uint64_t *prefix)
 void get_hash(const char *input, const size_t in_size, char **output, int variant, uint64_t height)
 {
     crypto::cn_slow_hash(input, in_size, reinterpret_cast<crypto::hash&>(*output), variant, height);
-}
-
-bool check_hash(const char* hash, uint64_t difficulty)
-{
-    return check_hash(reinterpret_cast<const crypto::hash&>(hash), difficulty);
 }
 

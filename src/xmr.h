@@ -38,10 +38,8 @@ extern "C" {
 #endif
 
 int get_hashing_blob(const char *input, const size_t in_size, char **output, size_t *out_size);
-int construct_block_blob(const char *block_data, uint64_t nonce, char **blob);
 int parse_address(const char *input, uint64_t *prefix);
 void get_hash(const char *input, const size_t in_size, char **output, int variant, uint64_t height);
-bool check_hash(const char* hash, uint64_t difficulty);
 
 #ifdef __cplusplus
 }
