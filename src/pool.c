@@ -910,8 +910,7 @@ block_template_free(block_template_t *block_template)
 static void
 block_templates_free()
 {
-    size_t length = sizeof(last_block_headers)/sizeof(*last_block_headers);
-    for (size_t i=0; i<length; i++)
+    for (size_t i=0; i<BLOCK_TEMPLATES_MAX; i++)
     {
         block_template_t *bt = block_templates[i];
         if (bt != NULL)
@@ -926,8 +925,7 @@ block_templates_free()
 static void
 last_block_headers_free()
 {
-    size_t length = sizeof(last_block_headers)/sizeof(*last_block_headers);
-    for (size_t i=0; i<length; i++)
+    for (size_t i=0; i<BLOCK_HEADERS_MAX; i++)
     {
         block_t *block = last_block_headers[i];
         if (block != NULL)
