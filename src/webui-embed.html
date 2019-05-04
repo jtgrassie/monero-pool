@@ -15,6 +15,13 @@
             table {
                 padding-bottom: 1em;
             }
+            td {
+                vertical-align: top;
+                white-space: wrap;
+            }
+            td:last-child {
+                white-space: unset;
+            }
             .wallet {
                 display: none;
             }
@@ -25,6 +32,7 @@
         <table>
             <tr><td>Pool HR: </td><td id="pool_hashrate"></td></tr>
             <tr><td>Network HR: </td><td id="network_hashrate"></td></tr>
+            <tr><td>Network height: </td><td id="network_height"></td></tr>
             <tr><td>Blocks found: </td><td id="pool_blocks_found"></td></tr>
             <tr><td>Last block found: </td><td id="last_block_found"></td></tr>
             <tr><td>Payment threshold: </td><td id="payment_threshold"></td></tr>
@@ -37,7 +45,7 @@
                 <td>Miner address: </td>
                 <td>
                     <form>
-                        <input type="text" id="wa" name="wa" size="8" />
+                        <input type="text" id="wa" name="wa" />
                         <input type="submit" value="Submit" />
                     </form>
                 </td>
