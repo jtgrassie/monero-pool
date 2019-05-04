@@ -87,7 +87,7 @@ EXTRA_FILES = Makefile
 
 C++ = g++
 CC = gcc
-XXD := $(shell command -v xxd)
+XXD := $(shell command -v xxd 2> /dev/null)
 
 STORE = build/$(TYPE)
 SOURCE := $(foreach DIR,$(DIRS),$(wildcard $(DIR)/*.cpp))
