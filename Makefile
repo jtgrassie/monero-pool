@@ -62,7 +62,7 @@ LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem boost_thre
 endif
 
 PKG_LIBS := $(shell pkg-config \
-    libevent \
+    "libevent >= 2.1" \
     json-c \
     openssl \
     libsodium \
@@ -74,7 +74,7 @@ DLIBS =
 INCPATH := $(DIRS) ${MONERO_INC} /opt/local/include /usr/local/include
 
 PKG_INC := $(shell pkg-config \
-    libevent \
+    "libevent >= 2.1" \
     json-c \
     openssl \
     libsodium \
