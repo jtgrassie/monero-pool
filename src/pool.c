@@ -2061,6 +2061,7 @@ client_on_submit(json_object *message, client_t *client)
 static void
 client_on_read(struct bufferevent *bev, void *ctx)
 {
+    const char unknown_method[] = "Unknown method";
     struct evbuffer *input, *output;
     char *line;
     size_t n;
@@ -2090,17 +2091,13 @@ client_on_read(struct bufferevent *bev, void *ctx)
         JSON_GET_OR_WARN(method, message, json_type_string);
         JSON_GET_OR_WARN(id, message, json_type_int);
         const char *method_name = json_object_get_string(method);
-        const char unknown[] = "Unknown method";
         client->json_id = json_object_get_int(id);
 
-        bool unknown_message = false;
+        bool unknown = false;
 
         if (method_name == NULL)
         {
-            char body[ERROR_BODY_MAX];
-            stratum_get_error_body(body, client->json_id, unknown);
-            evbuffer_add(output, body, strlen(body));
-            unknown_message = true;
+            unknown = true;
         }
         else if (strcmp(method_name, "login") == 0)
         {
@@ -2122,21 +2119,18 @@ client_on_read(struct bufferevent *bev, void *ctx)
         }
         else
         {
-            char body[ERROR_BODY_MAX];
-            stratum_get_error_body(body, client->json_id, unknown);
-            evbuffer_add(output, body, strlen(body));
-            unknown_message = true;
+            unknown = true;
         }
 
         json_object_put(message);
         free(line);
 
-        if (unknown_message)
+        if (unknown)
         {
-            char *body = stratum_new_error_body(client->json_id, unknown);
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, unknown_method);
             evbuffer_add(output, body, strlen(body));
-            free(body);
-            log_info("Removing client. Unknown message.");
+            log_info("Removing client. Unknown method called.");
             evbuffer_drain(input, len);
             client_clear(bev);
             return;
