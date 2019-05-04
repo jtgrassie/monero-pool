@@ -85,23 +85,6 @@ bin_to_hex(const char *bin, size_t bin_size, char *hex)
 }
 
 void
-reverse_hex(char *hex, size_t len)
-{
-    assert(len % 2 == 0);
-    size_t start = 0;
-    size_t end = len-2;
-    char temp[2];
-    while (start < end)
-    {
-        memcpy(&temp[0], &hex[start], 2);
-        memcpy(&hex[start], &hex[end], 2);
-        memcpy(&hex[end], &temp[0], 2);
-        start += 2;
-        end -= 2;
-    }
-}
-
-void
 reverse_bin(char *bin, size_t len)
 {
     size_t start = 0;
