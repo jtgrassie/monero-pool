@@ -865,7 +865,7 @@ startup_pauout(uint64_t height)
         pool_stats.last_block_found = block->timestamp;
 
         if (block->height > height - 60)
-            break;
+            continue;
         if (block->status & BLOCK_UNLOCKED || block->status & BLOCK_ORPHANED)
             continue;
 
@@ -1158,16 +1158,14 @@ rpc_get_request_body(char *body, const char* method, char* fmt, ...)
                     pb += strlen(pb);
                     break;
             }
-            char append = ':';
-            if (count++ % 2 != 0)
-                append = ',';
-            *pb++ = append;
+            *pb++ = count++ % 2 ? ',' : ':';
         }
         va_end(args);
         *--pb = '}';
         pb++;
     }
-    *pb = '}';
+    *pb++ = '}';
+    *pb = '\0';
     log_trace("Payload: %s", body);
 }
 
