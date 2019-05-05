@@ -100,3 +100,12 @@ reverse_bin(char *bin, size_t len)
     }
 }
 
+char *stecpy(char *dst, const char *src, const char *end)
+{
+    while (*src && dst < end)
+        *dst++ = *src++;
+    if (dst < end)
+        *dst = '\0';
+    return dst;
+}
+
