@@ -998,14 +998,12 @@ pool_clients_free()
 static job_t *
 client_find_job(client_t *client, const char *job_id)
 {
-    char jid[33];
+    uuid_t jid;
+    hex_to_bin(job_id, (char*)&jid, sizeof(uuid_t));
     for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
     {
-        memset(jid, 0, 33);
         job_t *job = &client->active_jobs[i];
-        bin_to_hex((const char*)job->id, sizeof(uuid_t), jid);
-        jid[32] = '\0';
-        if (strcmp(job_id, jid) == 0)
+        if (memcmp(job->id, jid, sizeof(uuid_t)) == 0)
             return job;
     }
     return NULL;
