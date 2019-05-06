@@ -35,7 +35,7 @@
 
 int is_hex_string(const char *str);
 void hex_to_bin(const char *hex, char *bin, size_t bin_size);
-void bin_to_hex(const char *bin, size_t bin_size, char *hex);
+void bin_to_hex(const char *bin, size_t bin_size, char *hex, size_t hex_size);
 void reverse_bin(char *bin, size_t len);
 char *stecpy(char *dst, const char *src, const char *end);
 

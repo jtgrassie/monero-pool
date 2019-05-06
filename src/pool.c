@@ -1027,7 +1027,7 @@ target_to_hex(uint64_t target, char *target_hex)
     if (target & 0xFFFFFFFF00000000)
     {
         log_debug("High target requested: %"PRIu64, target);
-        bin_to_hex((const char*)&target, 8, &target_hex[0]);
+        bin_to_hex((const char*)&target, 8, &target_hex[0], 16);
         target_hex[16] = '\0';
         return;
     }
@@ -1043,7 +1043,7 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_div(diff, NULL, base_diff, bnt, bn_ctx);
     BN_rshift(diff, diff, 224);
     uint32_t w = BN_get_word(diff);
-    bin_to_hex((const char*)&w, 4, &target_hex[0]);
+    bin_to_hex((const char*)&w, 4, &target_hex[0], 8);
     target_hex[8] = '\0';
     BN_free(bnt);
     BN_free(diff);
@@ -1056,7 +1056,7 @@ stratum_get_proxy_job_body(char *body, const client_t *client, const char *block
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
     char job_id[33];
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id);
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
     char target_hex[17];
     target_to_hex(target, &target_hex[0]);
@@ -1091,7 +1091,7 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
     char job_id[33];
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id);
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
     const char *blob = job->blob;
     uint64_t target = job->target;
     uint64_t height = job->block_template->height;
@@ -1776,7 +1776,7 @@ client_send_job(client_t *client, bool response)
 
     /* Make hex */
     job->blob = calloc((hashing_blob_size << 1) +1, sizeof(char));
-    bin_to_hex(hashing_blob, hashing_blob_size, job->blob);
+    bin_to_hex(hashing_blob, hashing_blob_size, job->blob, hashing_blob_size << 1);
     log_trace("Miner hashing blob: %s", job->blob);
 
     /* Save a job id */
@@ -1787,7 +1787,7 @@ client_send_job(client_t *client, bool response)
 
     /* Send */
     char job_id[33];
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id);
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
     
     /* Retarget */
     double duration = difftime(time(NULL), client->connected_since);
@@ -1804,7 +1804,7 @@ client_send_job(client_t *client, bool response)
     else
     {
         char *block_hex = calloc(bin_size+1, sizeof(char));
-        bin_to_hex(block, bin_size, block_hex);
+        bin_to_hex(block, bin_size, block_hex, bin_size << 1);
         stratum_get_proxy_job_body(body, client, block_hex, response);
         free(block_hex);
     }
@@ -1875,7 +1875,7 @@ client_on_login(json_object *message, client_t *client)
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id));
     uuid_t cid;
     uuid_generate(cid);
-    bin_to_hex((const char*)cid, sizeof(uuid_t), client->client_id);
+    bin_to_hex((const char*)cid, sizeof(uuid_t), client->client_id, 32);
     char status[256];
     snprintf(status, 256, "Logged in: %s %s\n", worker_id, address);
     client_send_job(client, true);
@@ -2051,7 +2051,7 @@ client_on_submit(json_object *message, client_t *client)
         /* Yay! Mined a block so submit to network */
         log_info("+++ MINED A BLOCK +++");
         char *block_hex = calloc((bin_size << 1)+1, sizeof(char));
-        bin_to_hex(block, bin_size, block_hex);
+        bin_to_hex(block, bin_size, block_hex, bin_size << 1);
         char body[RPC_BODY_MAX];
         snprintf(body, RPC_BODY_MAX,
                 "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"submit_block\", \"params\":[\"%s\"]}",
@@ -2063,7 +2063,7 @@ client_on_submit(json_object *message, client_t *client)
 
         block_t* b = (block_t*)callback->data;
         b->height = bt->height;
-        bin_to_hex(submitted_hash, 32, b->hash);
+        bin_to_hex(submitted_hash, 32, b->hash, 64);
         memcpy(b->prev_hash, bt->prev_hash, 64);
         b->difficulty = bt->difficulty;
         b->status = BLOCK_LOCKED;

@@ -48,11 +48,8 @@ is_hex_string(const char *str)
     const char *cp = str;
     while (*cp)
     {
-        if (!isxdigit(*cp))
-        {
+        if (!isxdigit(*cp++))
             return -2;
-        }
-        cp++;
     }
     return 0;
 }
@@ -64,7 +61,8 @@ hex_to_bin(const char *hex, char *bin, size_t bin_size)
     assert(len % 2 == 0);
     assert(bin_size >= len / 2);
     const char *ph = hex;
-    while (*ph)
+    char *end = bin + bin_size;
+    while (*ph && bin < end)
     {
         sscanf(ph, "%2hhx", bin++);    
         ph += 2;
@@ -72,8 +70,9 @@ hex_to_bin(const char *hex, char *bin, size_t bin_size)
 }
 
 void
-bin_to_hex(const char *bin, size_t bin_size, char *hex)
+bin_to_hex(const char *bin, size_t bin_size, char *hex, size_t hex_size)
 {
+    assert(bin_size << 1 == hex_size);
     const char *hex_chars = "0123456789abcdef";
     char *ph = hex;
     const char *pb = bin;
