@@ -853,6 +853,8 @@ send_payments()
         callback->cb = rpc_on_wallet_transferred;
         rpc_wallet_request(base, body, callback);
     }
+    else
+        free(payments);
 
     return 0;
 }
