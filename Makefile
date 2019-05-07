@@ -82,9 +82,6 @@ PKG_INC := $(shell pkg-config \
 
 LIBPATH := /opt/local/lib/ /usr/local/lib
 
-# Which files to add to backups, apart from the source code
-EXTRA_FILES = Makefile
-
 C++ = g++
 CC = gcc
 XXD := $(shell command -v xxd 2> /dev/null)
@@ -104,12 +101,13 @@ CDFILES := $(addprefix $(STORE)/,$(CSOURCE:.c=.d))
 SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 
-.PHONY: clean backup dirs debug release preflight
+.PHONY: clean dirs debug release preflight
 
 $(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
 	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) $(LDPARAM) $(MONERO_LIBS) $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) $(foreach LIB,$(LIBPATH),-L$(LIB)) $(PKG_LIBS) $(STATIC_LIBS)
 	@cp pool.conf $(STORE)/
+	@cp tools/* $(STORE)/
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
@@ -148,10 +146,6 @@ clean:
 	@find ./build -type f -name '*.o' -delete
 	@find ./build -type f -name '*.d' -delete
 	@find ./build -type f -name $(TARGET) -delete
-
-backup:
-	@-if [ ! -e build/backup ]; then mkdir -p build/backup; fi;
-	@zip build/backup/backup_`date +%d-%m-%y_%H.%M`.zip $(SOURCE) $(HEADERS) $(EXTRA_FILES)
 
 dirs:
 	@-if [ ! -e $(STORE) ]; then mkdir -p $(STORE); fi;

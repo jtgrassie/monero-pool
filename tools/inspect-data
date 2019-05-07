@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import argparse
+import sys
+import lmdb
+import struct
+from ctypes import *
+from datetime import datetime
+
+def print_balance(path):
+    env = lmdb.open(path, readonly=True, max_dbs=1, create=False)
+    balance = env.open_db('balance'.encode())
+    with env.begin(db=balance) as txn:
+        with txn.cursor() as curs:
+            for key, value in curs:
+                address = key.decode('utf-8').rstrip('\0')
+                address = '{}...{}'.format(address[:8], address[-8:])
+                amount = c_longlong.from_buffer_copy(value).value
+                amount = '{0:.6f}'.format(amount/1e12)
+                print('{}\t{}'.format(address, amount))
+    env.close()
+
+def print_payements(path):
+    env = lmdb.open(path, readonly=True, max_dbs=1, create=False)
+    payments = env.open_db('payments'.encode())
+    with env.begin(db=payments) as txn:
+        with txn.cursor() as curs:
+            for key, value in curs:
+                address = key.decode('utf-8').rstrip('\0')
+                address = '{}...{}'.format(address[:8], address[-8:])
+                amount, ts, addr = struct.unpack("Q Q 128s", value)
+                amount = '{0:.6f}'.format(amount/1e12)
+                dt = datetime.fromtimestamp(ts)
+                print('{}\t{}\t{}'.format(address, amount,
+                    dt.strftime('%Y-%m-%d %H:%M:%S')))
+    env.close()
+
+def main():
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-b', '--balances', action='store_true', help='list miner balances')
+    group.add_argument('-p', '--payments', action='store_true', help='list payments made')
+    parser.add_argument('database', help='path to database')
+    args = parser.parse_args()
+    if args.balances:
+        print_balance(args.database)
+    elif args.payments:
+        print_payements(args.database)
+
+if __name__ == '__main__':
+    main()
+
