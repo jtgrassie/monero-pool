@@ -85,6 +85,30 @@ binary `monero-pool`, or place it in your home directory or launch `monero-pool`
 with the flag `--config-file path/to/pool.conf` to use a custom location. The
 configuration options should be self explanatory.
 
+#### Block notification
+
+There is one configuration option that deserves a special mention.
+
+You can optionally start the pool with the flag `--block-notified` (or set in
+the config file: `block-notified = 1`). This will prevent the pool from
+*polling* for new blocks using a timer, and instead, fetch a new block template
+when it receives a *signal* (specifically, *SIGUSR1*). Now whenever you start
+`monerod`, you'll make use of its `--block-notify` option.
+
+E.g.
+
+<pre>
+monerod ... <b>--block-notify '/usr/bin/pkill -USR1 monero-pool'</b>
+</pre>
+
+This instructs `monerod` to send the required signal, *SIGUSR1*, to your pool
+whenever a new block is added to the chain.
+
+Using this mechanism has a significant benefit - your pool *immediatley* knows
+when to fetch a new block template to send to your miners. You're essentially
+giving your miners a head-start over miners in pools which use polling (which
+is what all the other pool implementations do).
+
 ## Running
 
 Ensure you have your Monero daemon (`monerod`) and wallet RPC

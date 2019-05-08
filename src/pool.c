@@ -131,6 +131,7 @@ typedef struct config_t
     uint32_t log_level;
     uint32_t webui_port;
     char log_file[MAX_PATH];
+    bool block_notified;
 } config_t;
 
 typedef struct block_template_t
@@ -255,14 +256,17 @@ static void client_on_read(struct bufferevent *bev, void *ctx);
 static void client_on_error(struct bufferevent *bev, short error, void *ctx);
 static void client_on_accept(evutil_socket_t listener, short event, void *arg);
 static void send_validation_error(const client_t *client, const char *message);
+static void sigusr1_handler(evutil_socket_t fd, short event, void *arg);
 
 static config_t config;
 static pool_clients_t pool_clients;
 static block_t *last_block_headers[BLOCK_HEADERS_MAX];
 static block_template_t *block_templates[BLOCK_TEMPLATES_MAX];
 static struct event_base *base;
+static struct event *listener_event;
 static struct event *timer_120s;
 static struct event *timer_10m;
+static struct event *signal_usr1;
 static uint32_t extra_nonce;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
 static MDB_env *env;
@@ -1637,7 +1641,7 @@ cleanup:
 }
 
 static void
-timer_on_120s(int fd, short kind, void *ctx)
+fetch_last_block_header()
 {
     log_info("Fetching last block header");
     char body[RPC_BODY_MAX];
@@ -1645,6 +1649,13 @@ timer_on_120s(int fd, short kind, void *ctx)
     rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
     callback->cb = rpc_on_last_block_header;
     rpc_request(base, body, callback);
+}
+
+static void
+timer_on_120s(int fd, short kind, void *ctx)
+{
+    log_trace("Fetching last block header from timer");
+    fetch_last_block_header();
     struct timeval timeout = { .tv_sec = 120, .tv_usec = 0 };
     evtimer_add(timer_120s, &timeout);
 }
@@ -2235,7 +2246,7 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
 }
 
 static void
-read_config(const char *config_file, const char *log_file)
+read_config(const char *config_file, const char *log_file, bool block_notified)
 {
     /* Start with some defaults for any missing... */
     strncpy(config.rpc_host, "127.0.0.1", 10);
@@ -2248,6 +2259,7 @@ read_config(const char *config_file, const char *log_file)
     config.pool_port = 4242;
     config.log_level = 5;
     config.webui_port = 4243;
+    config.block_notified = block_notified;
 
     char path[MAX_PATH];
     if (config_file)
@@ -2350,6 +2362,10 @@ read_config(const char *config_file, const char *log_file)
         {
             strncpy(config.log_file, val, sizeof(config.log_file));
         }
+        else if (strcmp(key, "block-notified") == 0)
+        {
+            config.block_notified = atoi(val);
+        }
     }
     fclose(fp);
 
@@ -2369,12 +2385,12 @@ read_config(const char *config_file, const char *log_file)
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  rpc_timeout = %u\n  pool_wallet = %s\n  "
             "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  pool_fee = %.2f\n  payment_threshold = %.2f\n  "
             "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
-            "log_level = %u\n  webui_port=%u\n  log-file = %s\n",
+            "log_level = %u\n  webui_port=%u\n  log-file = %s\n  block-notified = %u\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
             config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
-            config.log_level, config.webui_port, config.log_file);
+            config.log_level, config.webui_port, config.log_file, config.block_notified);
 }
 
 static void
@@ -2382,7 +2398,6 @@ run(void)
 {
     evutil_socket_t listener;
     struct sockaddr_in sin;
-    struct event *listener_event;
 
     base = event_base_new();
     if (!base)
@@ -2424,8 +2439,15 @@ run(void)
         return;
     }
 
-    timer_120s = evtimer_new(base, timer_on_120s, NULL);
-    timer_on_120s(-1, EV_TIMEOUT, NULL);
+    signal_usr1 = evsignal_new(base, SIGUSR1, sigusr1_handler, NULL);
+    event_add(signal_usr1, NULL);
+    if (!config.block_notified)
+    {
+        timer_120s = evtimer_new(base, timer_on_120s, NULL);
+        timer_on_120s(-1, EV_TIMEOUT, NULL);
+    }
+    else
+        fetch_last_block_header();
 
     timer_10m = evtimer_new(base, timer_on_10m, NULL);
     timer_on_10m(-1, EV_TIMEOUT, NULL);
@@ -2436,13 +2458,16 @@ run(void)
 static void
 cleanup()
 {
-    printf("\n");
-    log_info("Performing cleanup");
+    log_info("\nPerforming cleanup");
+    if (listener_event)
+        event_free(listener_event);
     stop_web_ui();
-    evtimer_del(timer_120s);
-    event_free(timer_120s);
-    evtimer_del(timer_10m);
-    event_free(timer_10m);
+    if (signal_usr1)
+        event_free(signal_usr1);
+    if (timer_120s)
+        event_free(timer_120s);
+    if (timer_10m)
+        event_free(timer_10m);
     event_base_free(base);
     pool_clients_free();
     last_block_headers_free();
@@ -2454,6 +2479,13 @@ cleanup()
     log_info("Pool shutdown successfully");
     if (fd_log != NULL)
         fclose(fd_log);
+}
+
+static void
+sigusr1_handler(evutil_socket_t fd, short event, void *arg)
+{
+    log_trace("Fetching last block header from signal");
+    fetch_last_block_header();
 }
 
 static void
@@ -2476,15 +2508,17 @@ int main(int argc, char **argv)
     {
         {"config-file", required_argument, 0, 'c'},
         {"log-file", required_argument, 0, 'l'},
+        {"block-notified", optional_argument, 0, 'b'},
         {0, 0, 0, 0}
     };
     char *config_file = NULL;
     char *log_file = NULL;
+    bool block_notified = false;
     int c;
     while (1)
     {
         int option_index = 0;
-        c = getopt_long (argc, argv, "c:l:",
+        c = getopt_long (argc, argv, "c:l:b::",
                        options, &option_index);
         if (c == -1)
             break;
@@ -2496,9 +2530,14 @@ int main(int argc, char **argv)
             case 'l':
                 log_file = strdup(optarg);
                 break;
+            case 'b':
+                block_notified = true;
+                if (optarg)
+                    block_notified = atoi(optarg);
+                break;
         }
     }
-    read_config(config_file, log_file);
+    read_config(config_file, log_file, block_notified);
 
     log_set_level(LOG_FATAL - config.log_level);
     if (config.log_file[0] != '\0')
