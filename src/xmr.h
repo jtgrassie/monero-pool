@@ -37,9 +37,11 @@
 extern "C" {
 #endif
 
-int get_hashing_blob(const char *input, const size_t in_size, char **output, size_t *out_size);
+int get_hashing_blob(const char *input, const size_t in_size,
+        char **output, size_t *out_size);
 int parse_address(const char *input, uint64_t *prefix);
-void get_hash(const char *input, const size_t in_size, char **output, int variant, uint64_t height);
+void get_hash(const char *input, const size_t in_size,
+        char **output, int variant, uint64_t height);
 
 #ifdef __cplusplus
 }

@@ -50,7 +50,8 @@
 
 using namespace cryptonote;
 
-int get_hashing_blob(const char *input, const size_t in_size, char **output, size_t *out_size)
+int get_hashing_blob(const char *input, const size_t in_size,
+        char **output, size_t *out_size)
 {
     block b = AUTO_VAL_INIT(b);
     blobdata bd = std::string(input, in_size);    
@@ -79,8 +80,10 @@ int parse_address(const char *input, uint64_t *prefix)
     return rv ? 0 : -1;
 }
 
-void get_hash(const char *input, const size_t in_size, char **output, int variant, uint64_t height)
+void get_hash(const char *input, const size_t in_size,
+        char **output, int variant, uint64_t height)
 {
-    crypto::cn_slow_hash(input, in_size, reinterpret_cast<crypto::hash&>(*output), variant, height);
+    crypto::cn_slow_hash(input, in_size,
+            reinterpret_cast<crypto::hash&>(*output), variant, height);
 }
 

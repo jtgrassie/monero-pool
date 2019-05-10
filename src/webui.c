@@ -75,7 +75,8 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
     uint32_t pbf = context->pool_stats->pool_blocks_found;
     uint64_t mh = 0;
     double mb = 0.0;
-    const char *wa = MHD_lookup_connection_value(connection, MHD_COOKIE_KIND, "wa");
+    const char *wa = MHD_lookup_connection_value(connection,
+            MHD_COOKIE_KIND, "wa");
     if (wa != NULL)
     {
         mh = miner_hr(wa);
@@ -127,7 +128,8 @@ int
 start_web_ui(wui_context_t *context)
 {
     log_debug("Starting Web UI");
-    mhd_daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, context->port, NULL, NULL,
+    mhd_daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY,
+            context->port, NULL, NULL,
             &answer_to_connection, (void*) context, MHD_OPTION_END);
     return mhd_daemon != NULL ? 0 : -1;
 }
