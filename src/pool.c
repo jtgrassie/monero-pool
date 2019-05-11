@@ -202,11 +202,13 @@ typedef struct payment_t
     char address[ADDRESS_MAX];
 } payment_t;
 
-typedef struct rpc_callback_t
+typedef struct rpc_callback_t rpc_callback_t;
+typedef void (*rpc_callback_fun)(const char*, rpc_callback_t*);
+struct rpc_callback_t
 {
-    void (*cb)(const char*, struct rpc_callback_t*);
+    rpc_callback_fun f;
     void *data;
-} rpc_callback_t;
+};
 
 static int database_init();
 static void database_close();
@@ -296,6 +298,25 @@ static FILE *fd_log;
             log_warn(#name " not a " #type);                         \
         }                                                            \
     }
+
+static inline rpc_callback_t *
+rpc_callback_new(rpc_callback_fun f, void *data)
+{
+    rpc_callback_t *c = calloc(1, sizeof(rpc_callback_t));
+    c->f = f;
+    c->data = data;
+    return c;
+}
+
+static inline void
+rpc_callback_free(rpc_callback_t *callback)
+{
+    if (!callback)
+        return;
+    if (callback->data)
+        free(callback->data);
+    free(callback);
+}
 
 static int
 compare_uint64(const MDB_val *a, const MDB_val *b)
@@ -852,10 +873,9 @@ send_payments()
                 start = stecpy(start, "]}}", end);
         }
         log_trace(body);
-        rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
-        callback->data = payments;
-        callback->cb = rpc_on_wallet_transferred;
-        rpc_wallet_request(base, body, callback);
+        rpc_callback_t *cb = rpc_callback_new(
+                rpc_on_wallet_transferred, payments);
+        rpc_wallet_request(base, body, cb);
     }
     else
         free(payments);
@@ -917,9 +937,9 @@ startup_pauout(uint64_t height)
 
         char body[RPC_BODY_MAX];
         rpc_get_request_body(body, "get_block_header_by_height", "sd", "height", block->height);
-        rpc_callback_t *c = calloc(1, sizeof(rpc_callback_t));
-        c->cb = rpc_on_block_header_by_height;
-        rpc_request(base, body, c);
+        rpc_callback_t *cb = rpc_callback_new(
+                rpc_on_block_header_by_height, NULL);
+        rpc_request(base, body, cb);
     }
 
     mdb_cursor_close(cursor);
@@ -1222,26 +1242,26 @@ rpc_on_response(struct evhttp_request *req, void *arg)
     if (!req)
     {
         log_error("Request failure. Aborting.");
-        goto cleanup;
+        rpc_callback_free(callback);
+        return;
     }
 
     int rc = evhttp_request_get_response_code(req);
     if (rc < 200 || rc >= 300)
     {
-        log_error("HTTP status code %d for %s. Aborting.", rc, evhttp_request_get_uri(req));
-        goto cleanup;
+        log_error("HTTP status code %d for %s. Aborting.",
+                rc, evhttp_request_get_uri(req));
+        rpc_callback_free(callback);
+        return;
     }
 
     input = evhttp_request_get_input_buffer(req);
     size_t len = evbuffer_get_length(input);
-    char *data = (char*) alloca(len+1);
-    evbuffer_remove(input, data, len);
-    data[len] = '\0';
-    callback->cb(data, callback);
-cleanup:
-    if (callback->data)
-        free(callback->data);
-    free(callback);
+    char body[len+1];
+    evbuffer_remove(input, body, len);
+    body[len] = '\0';
+    callback->f(body, callback);
+    rpc_callback_free(callback);
 }
 
 static void
@@ -1475,16 +1495,15 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         char body[RPC_BODY_MAX];
         uint64_t reserve = 17;
         rpc_get_request_body(body, "get_block_template", "sssd", "wallet_address", config.pool_wallet, "reserve_size", reserve);
-        rpc_callback_t *c1 = calloc(1, sizeof(rpc_callback_t));
-        c1->cb = rpc_on_block_template;
-        rpc_request(base, body, c1);
+        rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, NULL);
+        rpc_request(base, body, cb1);
 
         uint64_t end = block->height - 60;
         uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
         rpc_get_request_body(body, "get_block_headers_range", "sdsd", "start_height", start, "end_height", end);
-        rpc_callback_t *c2 = calloc(1, sizeof(rpc_callback_t));
-        c2->cb = rpc_on_block_headers_range;
-        rpc_request(base, body, c2);
+        rpc_callback_t *cb2 = rpc_callback_new(
+                rpc_on_block_headers_range, NULL);
+        rpc_request(base, body, cb2);
     }
 
     json_object_put(root);
@@ -1646,9 +1665,8 @@ fetch_last_block_header()
     log_info("Fetching last block header");
     char body[RPC_BODY_MAX];
     rpc_get_request_body(body, "get_last_block_header", NULL);
-    rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
-    callback->cb = rpc_on_last_block_header;
-    rpc_request(base, body, callback);
+    rpc_callback_t *cb = rpc_callback_new(rpc_on_last_block_header, NULL);
+    rpc_request(base, body, cb);
 }
 
 static void
@@ -2068,11 +2086,10 @@ client_on_submit(json_object *message, client_t *client)
                 "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"submit_block\", \"params\":[\"%s\"]}",
                 block_hex);
 
-        rpc_callback_t *callback = calloc(1, sizeof(rpc_callback_t));
-        callback->cb = rpc_on_block_submitted;
-        callback->data = calloc(1, sizeof(block_t));
+        rpc_callback_t *cb = rpc_callback_new(rpc_on_block_submitted, NULL);
+        cb->data = calloc(1, sizeof(block_t));
 
-        block_t* b = (block_t*)callback->data;
+        block_t* b = (block_t*)cb->data;
         b->height = bt->height;
         bin_to_hex(submitted_hash, 32, b->hash, 64);
         memcpy(b->prev_hash, bt->prev_hash, 64);
@@ -2080,7 +2097,7 @@ client_on_submit(json_object *message, client_t *client)
         b->status = BLOCK_LOCKED;
         b->timestamp = now;
 
-        rpc_request(base, body, callback);
+        rpc_request(base, body, cb);
         free(block_hex);
     }
     else if (BN_cmp(hd, jd) < 0)
