@@ -34,14 +34,13 @@ shout on IRC: jtgrassie on Freenode.
 The build system now requires the Monero source tree to be cloned and compiled.
 Follow the
 [instructions](https://github.com/monero-project/monero#compiling-monero-from-source)
-for compiling Monero, then export the following variables:
+for compiling Monero, then export the following variable:
 
 ```bash
 export MONERO_ROOT=/path/to/cloned/monero
-export MONERO_BUILD_ROOT=$MONERO_ROOT/build/<system>/<branch>/<release|debug>
 ```
 
-Replacing the values appropriately.
+Replacing the path appropriately.
 
 Beyond the Monero dependencies, the following extra libraries are also required
 to build the pool:
