@@ -60,6 +60,7 @@
 #include <openssl/bn.h>
 #include <pthread.h>
 
+#include "bstack.h"
 #include "util.h"
 #include "xmr.h"
 #include "log.h"
@@ -220,9 +221,6 @@ static int balance_add(const char *address, uint64_t amount, MDB_txn *parent);
 static int send_payments();
 static int startup_pauout(uint64_t height);
 static void update_pool_hr();
-static void block_template_free(block_template_t *block_template);
-static void block_templates_free();
-static void last_block_headers_free();
 static void pool_clients_init();
 static void pool_clients_free();
 static void pool_clients_send_job();
@@ -262,8 +260,8 @@ static void sigusr1_handler(evutil_socket_t fd, short event, void *arg);
 
 static config_t config;
 static pool_clients_t pool_clients;
-static block_t *last_block_headers[BLOCK_HEADERS_MAX];
-static block_template_t *block_templates[BLOCK_TEMPLATES_MAX];
+static bstack_t *bst;
+static bstack_t *bsh;
 static struct event_base *base;
 static struct event *listener_event;
 static struct event *timer_120s;
@@ -966,36 +964,19 @@ update_pool_hr()
 }
 
 static void
-block_template_free(block_template_t *block_template)
+template_recycle(void *item)
 {
-    free(block_template->blockhashing_blob);
-    free(block_template->blocktemplate_blob);
-    free(block_template);
-}
-
-static void
-block_templates_free()
-{
-    for (size_t i=0; i<BLOCK_TEMPLATES_MAX; i++)
+    block_template_t *bt = (block_template_t*) item;
+    log_trace("Recycle block template at height: %"PRIu64, bt->height);
+    if (bt->blockhashing_blob)
     {
-        block_template_t *bt = block_templates[i];
-        if (bt != NULL)
-        {
-            free(bt->blockhashing_blob);
-            free(bt->blocktemplate_blob);
-            free(bt);
-        }
+        free(bt->blockhashing_blob);
+        bt->blockhashing_blob = NULL;
     }
-}
-
-static void
-last_block_headers_free()
-{
-    for (size_t i=0; i<BLOCK_HEADERS_MAX; i++)
+    if (bt->blocktemplate_blob)
     {
-        block_t *block = last_block_headers[i];
-        if (block != NULL)
-            free(block);
+        free(bt->blocktemplate_blob);
+        bt->blocktemplate_blob = NULL;
     }
 }
 
@@ -1403,26 +1384,8 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
         return;
     }
 
-    block_template_t *bt = calloc(1, sizeof(block_template_t));
-    response_to_block_template(result, bt);
-    block_template_t *front = block_templates[0];
-    if (front == NULL)
-    {
-        block_templates[0] = bt;
-    }
-    else
-    {
-        size_t i = BLOCK_TEMPLATES_MAX;
-        while (--i)
-        {
-            if (i == BLOCK_TEMPLATES_MAX - 1 && block_templates[i] != NULL)
-            {
-                block_template_free(block_templates[i]);
-            }
-            block_templates[i] = block_templates[i-1];
-        }
-        block_templates[0] = bt;
-    }
+    block_template_t *front = (block_template_t*) bstack_push(bst, NULL);
+    response_to_block_template(result, front);
     pool_clients_send_job();
     json_object_put(root);
 }
@@ -1453,40 +1416,27 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    block_t *front = last_block_headers[0];
-    block_t *block = calloc(1, sizeof(block_t));
+    block_t *front = bstack_peek(bsh);
+    block_t *block = bstack_push(bsh, NULL);
     JSON_GET_OR_WARN(block_header, result, json_type_object);
     response_to_block(block_header, block);
-    if (front == NULL)
-    {
-        startup_pauout(block->height);
-    }
     bool need_new_template = false;
     if (front != NULL && block->height > front->height)
     {
-        size_t i = BLOCK_HEADERS_MAX;
-        while (--i)
-        {
-            if (i == BLOCK_HEADERS_MAX - 1 && last_block_headers[i] != NULL)
-            {
-                free(last_block_headers[i]);
-            }
-            last_block_headers[i] = last_block_headers[i-1];
-        }
-        last_block_headers[0] = block;
         need_new_template = true;
     }
     else if (front == NULL)
     {
-        last_block_headers[0] = block;
+        startup_pauout(block->height);
         need_new_template = true;
     }
     else
-        free(block);
+        bstack_drop(bsh);
 
-    pool_stats.network_difficulty = last_block_headers[0]->difficulty;
-    pool_stats.network_hashrate = last_block_headers[0]->difficulty / BLOCK_TIME;
-    pool_stats.network_height = last_block_headers[0]->height;
+    front = bstack_peek(bsh);
+    pool_stats.network_difficulty = front->difficulty;
+    pool_stats.network_hashrate = front->difficulty / BLOCK_TIME;
+    pool_stats.network_height = front->height;
     update_pool_hr();
 
     if (need_new_template)
@@ -1772,7 +1722,7 @@ client_send_job(client_t *client, bool response)
     memset(job, 0, sizeof(job_t));
 
     /* Quick check we actually have a block template */
-    block_template_t *bt = block_templates[0];
+    block_template_t *bt = bstack_peek(bst);
     if (!bt)
     {
         log_warn("Cannot send client a job as have not yet recieved a block template");
@@ -2487,8 +2437,8 @@ cleanup()
         event_free(timer_10m);
     event_base_free(base);
     pool_clients_free();
-    last_block_headers_free();
-    block_templates_free();
+    bstack_free(bsh);
+    bstack_free(bst);
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
@@ -2578,6 +2528,10 @@ int main(int argc, char **argv)
         log_fatal("Failed to initialize database. Return code: %d", err);
         goto cleanup;
     }
+
+    bstack_new(&bst, BLOCK_TEMPLATES_MAX, sizeof(block_template_t),
+            template_recycle);
+    bstack_new(&bsh, BLOCK_HEADERS_MAX, sizeof(block_t), NULL);
 
     bn_ctx = BN_CTX_new();
     base_diff = NULL;
