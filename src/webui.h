@@ -56,6 +56,6 @@ typedef struct wui_context_t
 } wui_context_t;
 
 int start_web_ui(wui_context_t *context);
-void stop_web_ui();
+void stop_web_ui(void);
 
 #endif

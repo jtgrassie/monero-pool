@@ -323,7 +323,7 @@ compare_payment(const MDB_val *a, const MDB_val *b)
 }
 
 static int
-database_init()
+database_init(void)
 {
     int rc;
     char *err;
@@ -388,7 +388,7 @@ database_init()
 }
 
 static void
-database_close()
+database_close(void)
 {
     log_info("Closing database");
     mdb_dbi_close(env, db_shares);
@@ -748,7 +748,7 @@ process_blocks(block_t *blocks, size_t count)
 }
 
 static void
-update_pool_hr()
+update_pool_hr(void)
 {
     uint64_t hr = 0;
     client_t *c = pool_clients.clients;
@@ -1053,7 +1053,7 @@ client_send_job(client_t *client, bool response)
 }
 
 static void
-pool_clients_send_job()
+pool_clients_send_job(void)
 {
     client_t *c = pool_clients.clients;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
@@ -1065,7 +1065,7 @@ pool_clients_send_job()
 }
 
 static void
-pool_clients_init()
+pool_clients_init(void)
 {
     assert(pool_clients.count == 0);
     pool_clients.count = POOL_CLIENTS_GROW;
@@ -1074,7 +1074,7 @@ pool_clients_init()
 }
 
 static void
-pool_clients_free()
+pool_clients_free(void)
 {
     assert(pool_clients.count != 0);
     client_t *c = pool_clients.clients;
@@ -1639,7 +1639,7 @@ cleanup:
 }
 
 static int
-send_payments()
+send_payments(void)
 {
     uint64_t threshold = 1000000000000 * config.payment_threshold;
     int rc;
@@ -1737,7 +1737,7 @@ send_payments()
 }
 
 static void
-fetch_last_block_header()
+fetch_last_block_header(void)
 {
     log_info("Fetching last block header");
     char body[RPC_BODY_MAX];
@@ -2448,7 +2448,7 @@ run(void)
 }
 
 static void
-cleanup()
+cleanup(void)
 {
     log_info("\nPerforming cleanup");
     if (listener_event)

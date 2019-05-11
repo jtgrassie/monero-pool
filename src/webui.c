@@ -137,7 +137,7 @@ start_web_ui(wui_context_t *context)
 }
 
 void
-stop_web_ui()
+stop_web_ui(void)
 {
     log_debug("Stopping Web UI");
     if (mhd_daemon != NULL)
