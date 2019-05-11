@@ -709,13 +709,13 @@ process_blocks(block_t *blocks, size_t count)
             {
                 continue;
             }
+            block_t nb;
+            memcpy(&nb, sb, sizeof(block_t));
             if (ib->status & BLOCK_ORPHANED)
             {
                 log_debug("Orphaned block at height %"PRIu64, ib->height);
-                block_t bp;
-                memcpy(&bp, sb, sizeof(block_t));
-                bp.status |= BLOCK_ORPHANED;
-                MDB_val new_val = {sizeof(block_t), (void*)&bp};
+                nb.status |= BLOCK_ORPHANED;
+                MDB_val new_val = {sizeof(block_t), (void*)&nb};
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
                 continue;
             }
@@ -724,22 +724,18 @@ process_blocks(block_t *blocks, size_t count)
             {
                 log_warn("Block with matching heights but differing parents! "
                         "Setting orphaned.\n");
-                block_t bp;
-                memcpy(&bp, sb, sizeof(block_t));
-                bp.status |= BLOCK_ORPHANED;
-                MDB_val new_val = {sizeof(block_t), (void*)&bp};
+                nb.status |= BLOCK_ORPHANED;
+                MDB_val new_val = {sizeof(block_t), (void*)&nb};
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
                 continue;
             }
-            block_t bp;
-            memcpy(&bp, sb, sizeof(block_t));
-            bp.status |= BLOCK_UNLOCKED;
-            bp.reward = ib->reward;
-            rc = payout_block(&bp, txn);
+            nb.status |= BLOCK_UNLOCKED;
+            nb.reward = ib->reward;
+            rc = payout_block(&nb, txn);
             if (rc == 0)
             {
-                log_debug("Paided out block %"PRIu64, bp.height);
-                MDB_val new_val = {sizeof(block_t), (void*)&bp};
+                log_debug("Paided out block %"PRIu64, nb.height);
+                MDB_val new_val = {sizeof(block_t), (void*)&nb};
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
             }
             else
@@ -1402,7 +1398,7 @@ startup_pauout(uint64_t height)
 
         if (block->height > height - 60)
             continue;
-        if (block->status & BLOCK_UNLOCKED || block->status & BLOCK_ORPHANED)
+        if (block->status != BLOCK_LOCKED)
             continue;
 
         char body[RPC_BODY_MAX];
@@ -1444,22 +1440,25 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    block_t *front = bstack_peek(bsh);
-    block_t *block = bstack_push(bsh, NULL);
+
     JSON_GET_OR_WARN(block_header, result, json_type_object);
-    response_to_block(block_header, block);
+    JSON_GET_OR_WARN(height, block_header, json_type_int);
+    uint64_t bh = json_object_get_int64(height);
     bool need_new_template = false;
-    if (front != NULL && block->height > front->height)
+    block_t *front = bstack_peek(bsh);
+    if (front != NULL && bh > front->height)
     {
         need_new_template = true;
+        block_t *block = bstack_push(bsh, NULL);
+        response_to_block(block_header, block);
     }
     else if (front == NULL)
     {
+        block_t *block = bstack_push(bsh, NULL);
+        response_to_block(block_header, block);
         startup_pauout(block->height);
         need_new_template = true;
     }
-    else
-        bstack_drop(bsh);
 
     front = bstack_peek(bsh);
     pool_stats.network_difficulty = front->difficulty;
@@ -1477,7 +1476,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, NULL);
         rpc_request(base, body, cb1);
 
-        uint64_t end = block->height - 60;
+        uint64_t end = front->height - 60;
         uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
         rpc_get_request_body(body, "get_block_headers_range", "sdsd",
                 "start_height", start, "end_height", end);
@@ -2027,14 +2026,13 @@ client_on_submit(json_object *message, client_t *client)
     /* Process share */
     client->hashes += job->target;
     time_t now = time(NULL);
+    bool can_store = true;
     log_trace("Checking hash against blobk difficulty: "
             "%lu, job difficulty: %lu",
             BN_get_word(bd), BN_get_word(jd));
-    bool can_store = false;
 
     if (BN_cmp(hd, bd) >= 0)
     {
-        can_store = true;
         /* Yay! Mined a block so submit to network */
         log_info("+++ MINED A BLOCK +++");
         char *block_hex = calloc((bin_size << 1)+1, sizeof(char));
@@ -2047,7 +2045,6 @@ client_on_submit(json_object *message, client_t *client)
 
         rpc_callback_t *cb = rpc_callback_new(rpc_on_block_submitted, NULL);
         cb->data = calloc(1, sizeof(block_t));
-
         block_t* b = (block_t*) cb->data;
         b->height = bt->height;
         bin_to_hex(submitted_hash, 32, b->hash, 64);
@@ -2067,8 +2064,6 @@ client_on_submit(json_object *message, client_t *client)
         log_debug("Low difficulty (%lu) share", BN_get_word(jd));
         evbuffer_add(output, body, strlen(body));
     }
-    else
-        can_store = true;
 
     BN_free(hd);
     BN_free(jd);
