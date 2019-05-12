@@ -44,6 +44,7 @@ typedef struct pool_stats_t
     uint64_t pool_hashrate;
     uint32_t pool_blocks_found;
     time_t last_block_found;
+    time_t last_template_fetched;
 } pool_stats_t;
 
 typedef struct wui_context_t

@@ -73,6 +73,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
     uint64_t ph = context->pool_stats->pool_hashrate;
     uint64_t nh = context->pool_stats->network_hashrate;
     uint64_t height = context->pool_stats->network_height;
+    uint64_t ltf = context->pool_stats->last_template_fetched;
     uint64_t lbf = context->pool_stats->last_block_found;
     uint32_t pbf = context->pool_stats->pool_blocks_found;
     uint64_t mh = 0;
@@ -89,6 +90,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             "\"pool_hashrate\":%"PRIu64","
             "\"network_hashrate\":%"PRIu64","
             "\"network_height\":%"PRIu64","
+            "\"last_template_fetched\":%"PRIu64","
             "\"last_block_found\":%"PRIu64","
             "\"pool_blocks_found\":%d,"
             "\"payment_threshold\":%.2f,"
@@ -97,7 +99,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
             "\"miner_balance\":%.8f"
-            "}", ph, nh, height, lbf, pbf,
+            "}", ph, nh, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
             context->pool_port, context->pool_stats->connected_miners,
             mh, mb);

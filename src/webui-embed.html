@@ -35,6 +35,7 @@
             <tr><td>Network height: </td><td id="network_height"></td></tr>
             <tr><td>Blocks found: </td><td id="pool_blocks_found"></td></tr>
             <tr><td>Last block found: </td><td id="last_block_found"></td></tr>
+            <tr><td>Last template: </td><td id="last_template_fetched"></td></tr>
             <tr><td>Payment threshold: </td><td id="payment_threshold"></td></tr>
             <tr><td>Pool fee: </td><td id="pool_fee"></td></tr>
             <tr><td>Pool port: </td><td id="pool_port"></td></tr>
@@ -53,20 +54,33 @@
         </table>
         <small><a href="https://github.com/jtgrassie/monero-pool">https://github.com/jtgrassie/monero-pool</a></small>
         <script>
-            function format_last_block(last)
+            function format_last_time(last)
             {
                 var now = new Date().getTime() / 1000;
                 var diff = now - last;
+                var v;
                 if (last == 0)
                     return "None yet";
                 else if (diff < 60)
-                    return parseInt(diff) + " seconds ago";
+                {
+                    v = parseInt(diff);
+                    return v + " second" + (v != 1 ? "s" : "") + " ago";
+                }
                 else if (diff < 3600)
-                    return parseInt(diff/60) + " minutes ago";
+                {
+                    v = parseInt(diff/60);
+                    return v + " minute" + (v != 1 ? "s" : "") + " ago";
+                }
                 else if (diff < 86400)
-                    return parseInt(diff/3600) + " hours ago";
+                {
+                    v = parseInt(diff/3600);
+                    return v + " hour" + (v != 1 ? "s" : "") + " ago";
+                }
                 else
-                    return parseInt(diff/86400) + " days ago";
+                {
+                    v = parseInt(diff/86400);
+                    return v + " day" + (v != 1 ? "s" : "") + " ago";
+                }
             }
 
             function format_hashrate(hr)
@@ -93,8 +107,8 @@
                     var el = document.querySelector("#"+e);
                     if (!el)
                         continue;
-                    if (e == "last_block_found")
-                        el.innerHTML = format_last_block(stats[e]);
+                    if (e == "last_block_found" || e == "last_template_fetched")
+                        el.innerHTML = format_last_time(stats[e]);
                     else if (/hashrate/.test(e))
                         el.innerHTML = format_hashrate(stats[e]);
                     else

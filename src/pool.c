@@ -1342,7 +1342,7 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-
+    pool_stats.last_template_fetched = time(NULL);
     block_template_t *front = (block_template_t*) bstack_push(bst, NULL);
     response_to_block_template(result, front);
     pool_clients_send_job();
