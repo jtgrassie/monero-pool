@@ -1,3 +1,4 @@
+/*
 Copyright (c) 2014-2019, The Monero Project
 
 All rights reserved.
@@ -29,3 +30,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
 developers.
+*/
+
+/* Bounded Stack */
+
+#ifndef BSTACK_H
+#define BSTACK_H
+
+#include <stddef.h>
+
+typedef struct bstack_t bstack_t;
+typedef void (*recycle_fun)(void*);
+
+void bstack_new(bstack_t **out, size_t count, size_t size, recycle_fun recycle);
+void bstack_free(bstack_t *q);
+void * bstack_push(bstack_t *q, void *item);
+void bstack_drop(bstack_t *q);
+void * bstack_peek(bstack_t *q);
+size_t bstack_count(bstack_t *q);
+void * bstack_next(bstack_t *q);
+void bstack_reset(bstack_t *q);
+
+#endif

@@ -1,33 +1,35 @@
 /*
-  Copyright (c) 2014-2018, The Monero Project
+Copyright (c) 2014-2019, The Monero Project
 
-  All rights reserved.
+All rights reserved.
 
-  Redistribution and use in source and binary forms, with or without modification, are
-  permitted provided that the following conditions are met:
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
 
-  1. Redistributions of source code must retain the above copyright notice, this list of
-     conditions and the following disclaimer.
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
 
-  2. Redistributions in binary form must reproduce the above copyright notice, this list
-     of conditions and the following disclaimer in the documentation and/or other
-     materials provided with the distribution.
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
 
-  3. Neither the name of the copyright holder nor the names of its contributors may be
-     used to endorse or promote products derived from this software without specific
-     prior written permission.
+3. Neither the name of the copyright holder nor the names of its contributors
+may be used to endorse or promote products derived from this software without
+specific prior written permission.
 
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
-  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
-  THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
-  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  Parts of the project are originally copyright (c) 2012-2013 The Cryptonote developers
+Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
+developers.
 */
 
 #define __STDC_FORMAT_MACROS
@@ -75,7 +77,8 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
     uint32_t pbf = context->pool_stats->pool_blocks_found;
     uint64_t mh = 0;
     double mb = 0.0;
-    const char *wa = MHD_lookup_connection_value(connection, MHD_COOKIE_KIND, "wa");
+    const char *wa = MHD_lookup_connection_value(connection,
+            MHD_COOKIE_KIND, "wa");
     if (wa != NULL)
     {
         mh = miner_hr(wa);
@@ -127,13 +130,14 @@ int
 start_web_ui(wui_context_t *context)
 {
     log_debug("Starting Web UI");
-    mhd_daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, context->port, NULL, NULL,
+    mhd_daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY,
+            context->port, NULL, NULL,
             &answer_to_connection, (void*) context, MHD_OPTION_END);
     return mhd_daemon != NULL ? 0 : -1;
 }
 
 void
-stop_web_ui()
+stop_web_ui(void)
 {
     log_debug("Stopping Web UI");
     if (mhd_daemon != NULL)
