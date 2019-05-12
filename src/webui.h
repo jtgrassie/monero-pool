@@ -51,8 +51,8 @@ typedef struct wui_context_t
 {
     uint32_t port;
     pool_stats_t *pool_stats;
-    float pool_fee;
-    float payment_threshold;
+    double pool_fee;
+    double payment_threshold;
     uint32_t pool_port;
 } wui_context_t;
 

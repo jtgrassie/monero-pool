@@ -127,9 +127,9 @@ typedef struct config_t
     uint32_t wallet_rpc_port;
     char pool_wallet[ADDRESS_MAX];
     uint64_t pool_start_diff;
-    float share_mul;
-    float pool_fee;
-    float payment_threshold;
+    double share_mul;
+    double pool_fee;
+    double payment_threshold;
     uint32_t pool_port;
     uint32_t log_level;
     uint32_t webui_port;
@@ -2358,7 +2358,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  "
             "rpc_timeout = %u\n  pool_wallet = %s\n  "
             "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  "
-            "pool_fee = %.2f\n  payment_threshold = %.2f\n  "
+            "pool_fee = %.3f\n  payment_threshold = %.2f\n  "
             "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
             "log_level = %u\n  webui_port=%u\n  "
             "log-file = %s\n  block-notified = %u\n",

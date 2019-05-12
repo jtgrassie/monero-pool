@@ -111,6 +111,8 @@
                         el.innerHTML = format_last_time(stats[e]);
                     else if (/hashrate/.test(e))
                         el.innerHTML = format_hashrate(stats[e]);
+                    else if (e == "pool_fee")
+                        el.innerHTML = (stats[e]*100) + "%";
                     else
                         el.innerHTML = stats[e];
                 }

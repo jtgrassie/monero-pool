@@ -94,7 +94,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             "\"last_block_found\":%"PRIu64","
             "\"pool_blocks_found\":%d,"
             "\"payment_threshold\":%.2f,"
-            "\"pool_fee\":%.2f,"
+            "\"pool_fee\":%.3f,"
             "\"pool_port\":%d,"
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
