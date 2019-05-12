@@ -35,11 +35,46 @@ developers.
 '''
 
 import argparse
-import sys
 import lmdb
-import struct
 from ctypes import *
 from datetime import datetime
+
+class share_t(Structure):
+    _fields_ = [('height', c_longlong),
+                ('difficulty', c_longlong),
+                ('address', c_char*128),
+                ('timestamp', c_longlong)]
+
+class payment_t(Structure):
+    _fields_ = [('amount', c_longlong),
+                ('timestamp', c_longlong),
+                ('address', c_char*128)]
+
+class block_t(Structure):
+    _fields_ = [('height', c_longlong),
+                ('hash', c_char*64),
+                ('prev_hash', c_char*64),
+                ('difficulty', c_longlong),
+                ('status', c_long),
+                ('reward', c_longlong),
+                ('timestamp', c_longlong)]
+
+def format_block_status(status):
+    s = ["LOCKED", "UNLOCKED", "ORPHANED"]
+    return s[status]
+
+def format_timestamp(timestamp):
+    dt = datetime.fromtimestamp(timestamp)
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+def format_amount(amount):
+    return '{0:.6f}'.format(amount/1e12)
+
+def format_address(address):
+    return '{}...{}'.format(address[:8], address[-8:])
+
+def address_from_key(key):
+    return key.decode('utf-8').rstrip('\0')
 
 def print_balance(path):
     env = lmdb.open(path, readonly=True, max_dbs=1, create=False)
@@ -47,10 +82,9 @@ def print_balance(path):
     with env.begin(db=balance) as txn:
         with txn.cursor() as curs:
             for key, value in curs:
-                address = key.decode('utf-8').rstrip('\0')
-                address = '{}...{}'.format(address[:8], address[-8:])
+                address = format_address(address_from_key(key))
                 amount = c_longlong.from_buffer_copy(value).value
-                amount = '{0:.6f}'.format(amount/1e12)
+                amount = format_amount(amount)
                 print('{}\t{}'.format(address, amount))
     env.close()
 
@@ -60,13 +94,25 @@ def print_payements(path):
     with env.begin(db=payments) as txn:
         with txn.cursor() as curs:
             for key, value in curs:
-                address = key.decode('utf-8').rstrip('\0')
-                address = '{}...{}'.format(address[:8], address[-8:])
-                amount, ts, addr = struct.unpack("Q Q 128s", value)
-                amount = '{0:.6f}'.format(amount/1e12)
-                dt = datetime.fromtimestamp(ts)
-                print('{}\t{}\t{}'.format(address, amount,
-                    dt.strftime('%Y-%m-%d %H:%M:%S')))
+                address = format_address(address_from_key(key))
+                p = payment_t.from_buffer_copy(value)
+                amount = format_amount(p.amount)
+                dt = format_timestamp(p.timestamp)
+                print('{}\t{}\t{}'.format(address, amount, dt))
+    env.close()
+
+def print_mined(path):
+    env = lmdb.open(path, readonly=True, max_dbs=1, create=False)
+    blocks = env.open_db('blocks'.encode())
+    with env.begin(db=blocks) as txn:
+        with txn.cursor() as curs:
+            for key, value in curs:
+                height = c_longlong.from_buffer_copy(key).value
+                b = block_t.from_buffer_copy(value)
+                dt = format_timestamp(b.timestamp)
+                reward = format_amount(b.reward)
+                status  = format_block_status(b.status)
+                print('{}\t{}\t{}\t{}'.format(height, status, reward, dt))
     env.close()
 
 def main():
@@ -76,12 +122,16 @@ def main():
             help='list miner balances')
     group.add_argument('-p', '--payments', action='store_true',
             help='list payments made')
+    group.add_argument('-m', '--mined', action='store_true',
+            help='list mined blocks')
     parser.add_argument('database', help='path to database')
     args = parser.parse_args()
     if args.balances:
         print_balance(args.database)
     elif args.payments:
         print_payements(args.database)
+    elif args.mined:
+        print_mined(args.database)
 
 if __name__ == '__main__':
     main()
