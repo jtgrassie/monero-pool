@@ -223,6 +223,7 @@ static struct event *timer_120s;
 static struct event *timer_10m;
 static struct event *signal_usr1;
 static uint32_t extra_nonce;
+static uint32_t instance_id;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
 static MDB_env *env;
 static MDB_dbi db_shares;
@@ -1003,6 +1004,10 @@ client_send_job(client_t *client, bool response)
     ++extra_nonce;
     memcpy(p, &extra_nonce, sizeof(extra_nonce));
     job->extra_nonce = extra_nonce;
+
+    /* Add our instance ID */
+    p += 4;
+    memcpy(p, &instance_id, sizeof(instance_id));
 
     /* Get hashong blob */
     size_t hashing_blob_size;
@@ -1911,7 +1916,7 @@ client_on_submit(json_object *message, client_t *client)
          (submit to network if good) add share to db
 
       Note reserved space is: extra_nonce, instance_id, pool_nonce, worker_nonce
-       4 bytes each. instance_id would be used for pool threads.
+       4 bytes each.
     */
 
     /* Convert template to blob */
@@ -1921,10 +1926,12 @@ client_on_submit(json_object *message, client_t *client)
     char *block = calloc(bin_size, sizeof(char));
     hex_to_bin(bt->blocktemplate_blob, block, bin_size);
 
-    /* Set the extra nonce in our reserved space */
+    /* Set the extra nonce and instance_id in our reserved space */
     char *p = block;
     p += bt->reserved_offset;
     memcpy(p, &job->extra_nonce, sizeof(extra_nonce));
+    p += 4;
+    memcpy(p, &instance_id, sizeof(instance_id));
 
     uint32_t pool_nonce = 0;
     uint32_t worker_nonce = 0;
@@ -1938,7 +1945,7 @@ client_on_submit(json_object *message, client_t *client)
         JSON_GET_OR_WARN(workerNonce, params, json_type_int);
         pool_nonce = json_object_get_int(poolNonce);
         worker_nonce = json_object_get_int(workerNonce);
-        p += 8;
+        p += 4;
         memcpy(p, &pool_nonce, sizeof(pool_nonce));
         p += 4;
         memcpy(p, &worker_nonce, sizeof(worker_nonce));
@@ -2548,6 +2555,10 @@ int main(int argc, char **argv)
     base_diff = NULL;
     BN_hex2bn(&base_diff,
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+
+    uuid_t iid;
+    uuid_generate(iid);
+    memcpy(&instance_id, iid, 4);
 
     pool_clients_init();
 
