@@ -57,11 +57,11 @@ is_hex_string(const char *str)
 }
 
 void
-hex_to_bin(const char *hex, char *bin, size_t bin_size)
+hex_to_bin(const char *hex, const size_t hex_len,
+        char *bin, const size_t bin_size)
 {
-    size_t len = strlen(hex);
-    assert(len % 2 == 0);
-    assert(bin_size >= len / 2);
+    assert(hex_len % 2 == 0);
+    assert(bin_size >= hex_len >> 1);
     const char *ph = hex;
     char *end = bin + bin_size;
     while (*ph && bin < end)
@@ -72,7 +72,8 @@ hex_to_bin(const char *hex, char *bin, size_t bin_size)
 }
 
 void
-bin_to_hex(const char *bin, size_t bin_size, char *hex, size_t hex_size)
+bin_to_hex(const char *bin, const size_t bin_size,
+        char *hex, const size_t hex_size)
 {
     assert(bin_size << 1 == hex_size);
     const char *hex_chars = "0123456789abcdef";
@@ -86,7 +87,7 @@ bin_to_hex(const char *bin, size_t bin_size, char *hex, size_t hex_size)
 }
 
 void
-reverse_bin(char *bin, size_t len)
+reverse_bin(char *bin, const size_t len)
 {
     size_t start = 0;
     size_t end = len-1;

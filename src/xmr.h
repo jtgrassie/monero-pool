@@ -39,11 +39,24 @@ developers.
 extern "C" {
 #endif
 
+enum xmr_error
+{
+    XMR_NO_ERROR         = 0,
+    XMR_PARSE_ERROR      = -1,
+    XMR_VIN_COUNT_ERROR  = -2,
+    XMR_VOUT_COUNT_ERROR = -3,
+    XMR_VIN_TYPE_ERROR   = -4,
+    XMR_TX_EXTRA_ERROR   = -5,
+    XMR_MISMATCH_ERROR   = -6
+};
+
 int get_hashing_blob(const char *input, const size_t in_size,
         char **output, size_t *out_size);
-int parse_address(const char *input, uint64_t *prefix);
+int parse_address(const char *input, uint64_t *prefix, char *pub_spend);
 void get_hash(const char *input, const size_t in_size,
         char **output, int variant, uint64_t height);
+int validate_block_from_blob(const char *blob_hex, const char *sec_view,
+        const char *pub_spend);
 
 #ifdef __cplusplus
 }

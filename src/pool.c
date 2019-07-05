@@ -87,6 +87,7 @@ developers.
 #define ADDRESS_MAX 128
 #define BLOCK_TIME 120
 #define HR_BLOCK_COUNT 5
+#define TEMLATE_HEIGHT_VARIANCE 5
 
 #define uint128_t unsigned __int128
 
@@ -117,6 +118,7 @@ developers.
 */
 
 enum block_status { BLOCK_LOCKED=0, BLOCK_UNLOCKED=1, BLOCK_ORPHANED=2 };
+enum stratum_mode { MODE_NORMAL=0, MODE_SELF_SELECT=1 };
 
 typedef struct config_t
 {
@@ -135,6 +137,7 @@ typedef struct config_t
     uint32_t webui_port;
     char log_file[MAX_PATH];
     bool block_notified;
+    bool disable_self_select;
 } config_t;
 
 typedef struct block_template_t
@@ -156,6 +159,7 @@ typedef struct job_t
     uint64_t target;
     uint128_t *submissions;
     size_t submissions_count;
+    block_template_t *miner_template;
 } job_t;
 
 typedef struct client_t
@@ -171,6 +175,7 @@ typedef struct client_t
     uint64_t hashes;
     time_t connected_since;
     bool is_proxy;
+    uint32_t mode;
 } client_t;
 
 typedef struct pool_clients_t
@@ -235,6 +240,8 @@ static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
 static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
+static char sec_view[32];
+static char pub_spend[32];
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
@@ -784,13 +791,23 @@ template_recycle(void *item)
 }
 
 static void
+retarget(client_t *client, job_t *job)
+{
+    double duration = difftime(time(NULL), client->connected_since);
+    uint8_t retarget_time = client->is_proxy ? 5 : 120;
+    uint64_t target = fmax((double)client->hashes /
+            duration * retarget_time, config.pool_start_diff);
+    job->target = target;
+    log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
+}
+
+static void
 target_to_hex(uint64_t target, char *target_hex)
 {
     if (target & 0xFFFFFFFF00000000)
     {
         log_debug("High target requested: %"PRIu64, target);
         bin_to_hex((const char*)&target, 8, &target_hex[0], 16);
-        target_hex[16] = '\0';
         return;
     }
     BIGNUM *diff = BN_new();
@@ -806,7 +823,6 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_rshift(diff, diff, 224);
     uint32_t w = BN_get_word(diff);
     bin_to_hex((const char*)&w, 4, &target_hex[0], 8);
-    target_hex[8] = '\0';
     BN_free(bnt);
     BN_free(diff);
 }
@@ -818,10 +834,10 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
     int json_id = client->json_id;
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
-    char job_id[33];
+    char job_id[33] = {0};
     bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
-    char target_hex[17];
+    char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
     const block_template_t *bt = job->block_template;
 
@@ -859,17 +875,57 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
 }
 
 static void
+stratum_get_job_body_ss(char *body, const client_t *client, bool response)
+{
+    /* job_id, target, pool_wallet, extra_nonce */
+    int json_id = client->json_id;
+    const char *client_id = client->client_id;
+    const job_t *job = &client->active_jobs[0];
+    char job_id[33] = {0};
+    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
+    uint64_t target = job->target;
+    char target_hex[17] = {0};
+    target_to_hex(target, &target_hex[0]);
+    char extra_bin[8];
+    memcpy(extra_bin, &job->extra_nonce, 4);
+    memcpy(extra_bin+4, &instance_id, 4);
+    char extra_hex[17] = {0};
+    bin_to_hex(extra_bin, 8, extra_hex, 16);
+
+    if (response)
+    {
+        snprintf(body, JOB_BODY_MAX, "{\"id\":%d,\"jsonrpc\":\"2.0\","
+                "\"error\":null,\"result\""
+                ":{\"id\":\"%.32s\",\"job\":{"
+                "\"job_id\":\"%.32s\",\"target\":\"%s\","
+                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\"},"
+                "\"status\":\"OK\"}}\n",
+                json_id, client_id, job_id, target_hex, extra_hex,
+                config.pool_wallet);
+    }
+    else
+    {
+        snprintf(body, JOB_BODY_MAX, "{\"jsonrpc\":\"2.0\",\"method\":"
+                "\"job\",\"params\""
+                ":{\"id\":\"%.32s\",\"job_id\":\"%.32s\","
+                "\"target\":\"%s\","
+                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\"}}\n",
+                client_id, job_id, target_hex, extra_hex, config.pool_wallet);
+    }
+}
+
+static void
 stratum_get_job_body(char *body, const client_t *client, bool response)
 {
     int json_id = client->json_id;
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
-    char job_id[33];
+    char job_id[33] = {0};
     bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
     const char *blob = job->blob;
     uint64_t target = job->target;
     uint64_t height = job->block_template->height;
-    char target_hex[17];
+    char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
 
     if (response)
@@ -925,16 +981,27 @@ client_clear_jobs(client_t *client)
     for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
     {
         job_t *job = &client->active_jobs[i];
-        if (job->blob != NULL)
+        if (job->blob)
         {
             free(job->blob);
             job->blob = NULL;
         }
-        if (job->submissions != NULL)
+        if (job->submissions)
         {
             free(job->submissions);
             job->submissions = NULL;
             job->submissions_count = 0;
+        }
+        if (job->miner_template)
+        {
+            block_template_t *bt = job->miner_template;
+            if (bt->blocktemplate_blob)
+            {
+                free(bt->blocktemplate_blob);
+                bt->blocktemplate_blob = NULL;
+            }
+            free(job->miner_template);
+            job->miner_template = NULL;
         }
     }
 }
@@ -943,7 +1010,7 @@ static job_t *
 client_find_job(client_t *client, const char *job_id)
 {
     uuid_t jid;
-    hex_to_bin(job_id, (char*)&jid, sizeof(uuid_t));
+    hex_to_bin(job_id, strlen(job_id), (char*)&jid, sizeof(uuid_t));
     for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
     {
         job_t *job = &client->active_jobs[i];
@@ -958,16 +1025,27 @@ client_send_job(client_t *client, bool response)
 {
     /* First cycle jobs */
     job_t *last = &client->active_jobs[CLIENT_JOBS_MAX-1];
-    if (last->blob != NULL)
+    if (last->blob)
     {
         free(last->blob);
         last->blob = NULL;
     }
-    if (last->submissions != NULL)
+    if (last->submissions)
     {
         free(last->submissions);
         last->submissions = NULL;
         last->submissions_count = 0;
+    }
+    if (last->miner_template)
+    {
+        block_template_t *bt = last->miner_template;
+        if (bt->blocktemplate_blob)
+        {
+            free(bt->blocktemplate_blob);
+            bt->blocktemplate_blob = NULL;
+        }
+        free(last->miner_template);
+        last->miner_template = NULL;
     }
     for (size_t i=CLIENT_JOBS_MAX-1; i>0; i--)
     {
@@ -977,6 +1055,20 @@ client_send_job(client_t *client, bool response)
     }
     job_t *job = &client->active_jobs[0];
     memset(job, 0, sizeof(job_t));
+
+    if (client->mode == MODE_SELF_SELECT)
+    {
+        uuid_generate(job->id);
+        retarget(client, job);
+        ++extra_nonce;
+        job->extra_nonce = extra_nonce;
+        char body[JOB_BODY_MAX];
+        stratum_get_job_body_ss(body, client, response);
+        log_trace("Client job: %s", body);
+        struct evbuffer *output = bufferevent_get_output(client->bev);
+        evbuffer_add(output, body, strlen(body));
+        return;
+    }
 
     /* Quick check we actually have a block template */
     block_template_t *bt = bstack_peek(bst);
@@ -996,7 +1088,7 @@ client_send_job(client_t *client, bool response)
     /* Convert template to blob */
     size_t bin_size = strlen(bt->blocktemplate_blob) >> 1;
     char *block = calloc(bin_size, sizeof(char));
-    hex_to_bin(bt->blocktemplate_blob, block, bin_size);
+    hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
 
     /* Set the extra nonce in our reserved space */
     char *p = block;
@@ -1027,16 +1119,11 @@ client_send_job(client_t *client, bool response)
     job->block_template = bt;
 
     /* Send */
-    char job_id[33];
+    char job_id[33] = {0};
     bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
 
     /* Retarget */
-    double duration = difftime(time(NULL), client->connected_since);
-    uint8_t retarget_time = client->is_proxy ? 5 : 120;
-    uint64_t target = fmax((double)client->hashes /
-            duration * retarget_time, config.pool_start_diff);
-    job->target = target;
-    log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
+    retarget(client, job);
 
     char body[JOB_BODY_MAX];
     if (!client->is_proxy)
@@ -1259,7 +1346,7 @@ rpc_on_block_header_by_height(const char* data, rpc_callback_t *callback)
     const char *ss = json_object_get_string(status);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1269,7 +1356,7 @@ rpc_on_block_header_by_height(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(ss, "OK") != 0)
+    if (!status || strcmp(ss, "OK") != 0)
     {
         log_error("Error getting block header by height: %s", ss);
         json_object_put(root);
@@ -1291,7 +1378,7 @@ rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
     const char *ss = json_object_get_string(status);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1301,7 +1388,7 @@ rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(ss, "OK") != 0)
+    if (!status || strcmp(ss, "OK") != 0)
     {
         log_warn("Error getting block headers by range: %s", ss);
         json_object_put(root);
@@ -1331,7 +1418,7 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
     const char *ss = json_object_get_string(status);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1341,7 +1428,7 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(ss, "OK") != 0)
+    if (!status || strcmp(ss, "OK") != 0)
     {
         log_error("Error getting block template: %s", ss);
         json_object_put(root);
@@ -1420,6 +1507,32 @@ startup_pauout(uint64_t height)
 }
 
 static void
+rpc_on_view_key(const char* data, rpc_callback_t *callback)
+{
+    json_object *root = json_tokener_parse(data);
+    JSON_GET_OR_WARN(result, root, json_type_object);
+    JSON_GET_OR_WARN(key, result, json_type_string);
+    json_object *error = NULL;
+    json_object_object_get_ex(root, "error", &error);
+    if (error)
+    {
+        JSON_GET_OR_WARN(code, error, json_type_object);
+        JSON_GET_OR_WARN(message, error, json_type_string);
+        int ec = json_object_get_int(code);
+        const char *em = json_object_get_string(message);
+        log_error("Error (%d) getting key: %s", ec, em);
+        json_object_put(root);
+        return;
+    }
+    const char *vk = json_object_get_string(key);
+    hex_to_bin(vk, strlen(vk), &sec_view[0], 32);
+    json_object_put(root);
+
+    uint64_t prefix;
+    parse_address(config.pool_wallet, &prefix, &pub_spend[0]);
+}
+
+static void
 rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
 {
     log_trace("Got last block header: \n%s", data);
@@ -1429,7 +1542,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     const char *ss = json_object_get_string(status);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1439,7 +1552,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         json_object_put(root);
         return;
     }
-    if (status == NULL || strcmp(ss, "OK") != 0)
+    if (!status || strcmp(ss, "OK") != 0)
     {
         log_error("Error getting last block header: %s", ss);
         json_object_put(root);
@@ -1451,13 +1564,13 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     uint64_t bh = json_object_get_int64(height);
     bool need_new_template = false;
     block_t *front = bstack_peek(bsh);
-    if (front != NULL && bh > front->height)
+    if (front && bh > front->height)
     {
         need_new_template = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
     }
-    else if (front == NULL)
+    else if (!front)
     {
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
@@ -1507,7 +1620,7 @@ rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
       an alternative block. Thus, still store it. This doesn't matter
       as upon payout, blocks are checked whether they are orphaned or not.
     */
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1515,7 +1628,7 @@ rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
         const char *em = json_object_get_string(message);
         log_warn("Error (%d) with block submission: %s", ec, em);
     }
-    if (status == NULL || strcmp(ss, "OK") != 0)
+    if (!status || strcmp(ss, "OK") != 0)
     {
         log_warn("Error submitting block: %s", ss);
     }
@@ -1537,7 +1650,7 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(result, root, json_type_object);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
-    if (error != NULL)
+    if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
         JSON_GET_OR_WARN(message, error, json_type_string);
@@ -1742,6 +1855,15 @@ send_payments(void)
 }
 
 static void
+fetch_view_key(void)
+{
+    char body[RPC_BODY_MAX];
+    rpc_get_request_body(body, "query_key", "ss", "key_type", "view_key");
+    rpc_callback_t *cb = rpc_callback_new(rpc_on_view_key, NULL);
+    rpc_wallet_request(base, body, cb);
+}
+
+static void
 fetch_last_block_header(void)
 {
     log_info("Fetching last block header");
@@ -1819,9 +1941,9 @@ client_find(struct bufferevent *bev, client_t **client)
 static void
 client_clear(struct bufferevent *bev)
 {
-    client_t *client;
+    client_t *client = NULL;
     client_find(bev, &client);
-    if (client == NULL)
+    if (!client)
         return;
     client_clear_jobs(client);
     memset(client, 0, sizeof(client_t));
@@ -1835,10 +1957,31 @@ client_on_login(json_object *message, client_t *client)
     JSON_GET_OR_ERROR(params, message, json_type_object, client);
     JSON_GET_OR_ERROR(login, params, json_type_string, client);
     JSON_GET_OR_ERROR(pass, params, json_type_string, client);
+    client->mode = MODE_NORMAL;
+    json_object *mode = NULL;
+    if (json_object_object_get_ex(params, "mode", &mode))
+    {
+        if (!json_object_is_type(mode, json_type_string))
+            log_warn("mode not a json_type_string");
+        else
+        {
+            const char *modestr = json_object_get_string(mode);
+            if (strcmp(modestr, "self-select") == 0)
+            {
+                if (config.disable_self_select)
+                {
+                    return send_validation_error(client,
+                            "pool disabled self-select");
+                }
+                client->mode = MODE_SELF_SELECT;
+                log_trace("Client login for mode: self-select");
+            }
+        }
+    }
 
     const char *address = json_object_get_string(login);
     uint64_t prefix;
-    parse_address(address, &prefix);
+    parse_address(address, &prefix, NULL);
     if (prefix != MAINNET_ADDRESS_PREFIX && prefix != TESTNET_ADDRESS_PREFIX)
         return send_validation_error(client,
                 "login only main wallet addresses are supported");
@@ -1857,14 +2000,72 @@ client_on_login(json_object *message, client_t *client)
         }
     }
 
+    if (client->is_proxy && client->mode == MODE_SELF_SELECT)
+    {
+        return send_validation_error(client,
+                "login mode self-select and proxy not yet supported");
+    }
+
     strncpy(client->address, address, sizeof(client->address));
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id));
     uuid_t cid;
     uuid_generate(cid);
     bin_to_hex((const char*)cid, sizeof(uuid_t), client->client_id, 32);
-    char status[256];
-    snprintf(status, 256, "Logged in: %s %s\n", worker_id, address);
     client_send_job(client, true);
+}
+
+static void
+client_on_block_template(json_object *message, client_t *client)
+{
+    struct evbuffer *output = bufferevent_get_output(client->bev);
+
+    JSON_GET_OR_ERROR(params, message, json_type_object, client);
+    JSON_GET_OR_ERROR(id, params, json_type_string, client);
+    JSON_GET_OR_ERROR(job_id, params, json_type_string, client);
+    JSON_GET_OR_ERROR(blob, params, json_type_string, client);
+    JSON_GET_OR_ERROR(difficulty, params, json_type_int, client);
+    JSON_GET_OR_ERROR(height, params, json_type_int, client);
+    JSON_GET_OR_ERROR(prev_hash, params, json_type_string, client);
+
+    const char *jid = json_object_get_string(job_id);
+    if (strlen(jid) != 32)
+        return send_validation_error(client, "job_id invalid length");
+
+    int64_t h = json_object_get_int64(height);
+    int64_t dh = llabs(h - (int64_t)pool_stats.network_height);
+    if (dh > TEMLATE_HEIGHT_VARIANCE)
+    {
+        char m[64];
+        snprintf(m, 64, "Bad height. Differs to pool by %"PRIu64" blocks.", dh);
+        return send_validation_error(client, m);
+    }
+
+    const char *btb = json_object_get_string(blob);
+    int rc = validate_block_from_blob(btb, &sec_view[0], &pub_spend[0]);
+    if (rc != 0)
+    {
+        log_warn("Bad template submitted: %d", rc);
+        return send_validation_error(client, "block template blob invalid");
+    }
+
+    job_t *job = client_find_job(client, jid);
+    if (!job)
+        return send_validation_error(client, "cannot find job with job_id");
+
+    if (job->miner_template)
+        return send_validation_error(client, "job already has block template");
+
+    job->miner_template = calloc(1, sizeof(block_template_t));
+    job->miner_template->blocktemplate_blob = strdup(btb);
+    job->miner_template->difficulty = json_object_get_int64(difficulty);
+    job->miner_template->height = json_object_get_int64(height);
+    memcpy(job->miner_template->prev_hash,
+            json_object_get_string(prev_hash), 64);
+
+    log_trace("Client set template: %s", btb);
+    char body[STATUS_BODY_MAX];
+    stratum_get_status_body(body, client->json_id, "OK");
+    evbuffer_add(output, body, strlen(body));
 }
 
 static void
@@ -1920,36 +2121,46 @@ client_on_submit(json_object *message, client_t *client)
     */
 
     /* Convert template to blob */
-    block_template_t *bt = job->block_template;
+    if (client->mode == MODE_SELF_SELECT && !job->miner_template)
+        return send_validation_error(client, "mode self-selct and no template");
+    block_template_t *bt;
+    if (job->miner_template)
+        bt = job->miner_template;
+    else
+        bt = job->block_template;
     char *btb = bt->blocktemplate_blob;
     size_t bin_size = strlen(btb) >> 1;
     char *block = calloc(bin_size, sizeof(char));
-    hex_to_bin(bt->blocktemplate_blob, block, bin_size);
+    hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
 
-    /* Set the extra nonce and instance_id in our reserved space */
     char *p = block;
-    p += bt->reserved_offset;
-    memcpy(p, &job->extra_nonce, sizeof(extra_nonce));
-    p += 4;
-    memcpy(p, &instance_id, sizeof(instance_id));
-
     uint32_t pool_nonce = 0;
     uint32_t worker_nonce = 0;
-    if (client->is_proxy)
+
+    if (client->mode != MODE_SELF_SELECT)
     {
-        /*
-          A proxy supplies pool_nonce and worker_nonce
-          so add them in the resrved space too.
-        */
-        JSON_GET_OR_WARN(poolNonce, params, json_type_int);
-        JSON_GET_OR_WARN(workerNonce, params, json_type_int);
-        pool_nonce = json_object_get_int(poolNonce);
-        worker_nonce = json_object_get_int(workerNonce);
+        /* Set the extra nonce and instance_id in our reserved space */
+        p += bt->reserved_offset;
+        memcpy(p, &job->extra_nonce, sizeof(extra_nonce));
         p += 4;
-        memcpy(p, &pool_nonce, sizeof(pool_nonce));
-        p += 4;
-        memcpy(p, &worker_nonce, sizeof(worker_nonce));
+        memcpy(p, &instance_id, sizeof(instance_id));
+        if (client->is_proxy)
+        {
+            /*
+              A proxy supplies pool_nonce and worker_nonce
+              so add them in the resrved space too.
+            */
+            JSON_GET_OR_WARN(poolNonce, params, json_type_int);
+            JSON_GET_OR_WARN(workerNonce, params, json_type_int);
+            pool_nonce = json_object_get_int(poolNonce);
+            worker_nonce = json_object_get_int(workerNonce);
+            p += 4;
+            memcpy(p, &pool_nonce, sizeof(pool_nonce));
+            p += 4;
+            memcpy(p, &worker_nonce, sizeof(worker_nonce));
+        }
     }
+
     uint128_t sub = 0;
     uint32_t *psub = (uint32_t*) &sub;
     *psub++ = result_nonce;
@@ -2005,7 +2216,7 @@ client_on_submit(json_object *message, client_t *client)
     const int cn_variant = major_version >= 7 ? major_version - 6 : 0;
     get_hash(hashing_blob, hashing_blob_size,
             (char**)&result_hash, cn_variant, bt->height);
-    hex_to_bin(result_hex, submitted_hash, 32);
+    hex_to_bin(result_hex, 64, submitted_hash, 32);
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)
     {
@@ -2102,17 +2313,18 @@ client_on_read(struct bufferevent *bev, void *ctx)
     struct evbuffer *input, *output;
     char *line;
     size_t n;
-    client_t *client;
+    client_t *client = NULL;
 
     client_find(bev, &client);
-    if (client == NULL)
+    if (!client)
         return;
 
     input = bufferevent_get_input(bev);
     output = bufferevent_get_output(bev);
 
     size_t len = evbuffer_get_length(input);
-    if (len >= MAX_LINE)
+    if (len > MAX_LINE ||
+            (client->mode == MODE_SELF_SELECT && len > MAX_LINE<<2))
     {
         const char *too_long = "Message too long\n";
         evbuffer_add(output, too_long, strlen(too_long));
@@ -2132,13 +2344,17 @@ client_on_read(struct bufferevent *bev, void *ctx)
 
         bool unknown = false;
 
-        if (method_name == NULL)
+        if (!method || !method_name)
         {
             unknown = true;
         }
         else if (strcmp(method_name, "login") == 0)
         {
             client_on_login(message, client);
+        }
+        else if (strcmp(method_name, "block_template") == 0)
+        {
+            client_on_block_template(message, client);
         }
         else if (strcmp(method_name, "submit") == 0)
         {
@@ -2238,8 +2454,9 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
     config.log_level = 5;
     config.webui_port = 4243;
     config.block_notified = block_notified;
+    config.disable_self_select = false;
 
-    char path[MAX_PATH];
+    char path[MAX_PATH] = {0};
     if (config_file)
     {
         strncpy(path, config_file, MAX_PATH);
@@ -2267,7 +2484,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
     log_info("Reading config at: %s", path);
 
     FILE *fp = fopen(path, "r");
-    if (fp == NULL)
+    if (!fp)
     {
         log_fatal("Cannot open config file. Aborting.");
         abort();
@@ -2276,13 +2493,13 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
     char *key;
     char *val;
     const char *tok = " =";
-    while (fgets(line, sizeof(line), fp) != NULL)
+    while (fgets(line, sizeof(line), fp))
     {
         key = strtok(line, tok);
-        if (key == NULL)
+        if (!key)
             continue;
         val = strtok(NULL, tok);
-        if (val == NULL)
+        if (!val)
             continue;
         val[strcspn(val, "\r\n")] = 0;
         if (strcmp(key, "rpc-host") == 0)
@@ -2345,10 +2562,14 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
         {
             config.block_notified = atoi(val);
         }
+        else if (strcmp(key, "disable-self-select") == 0)
+        {
+            config.disable_self_select = atoi(val);
+        }
     }
     fclose(fp);
 
-    if (log_file != NULL)
+    if (log_file)
         strncpy(config.log_file, log_file, sizeof(config.log_file));
 
     if (!config.pool_wallet[0])
@@ -2368,13 +2589,14 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
             "pool_fee = %.3f\n  payment_threshold = %.2f\n  "
             "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
             "log_level = %u\n  webui_port=%u\n  "
-            "log-file = %s\n  block-notified = %u\n",
+            "log-file = %s\n  block-notified = %u\n  "
+            "disable-self-select = %u\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
             config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
             config.log_level, config.webui_port,
-            config.log_file, config.block_notified);
+            config.log_file, config.block_notified, config.disable_self_select);
 }
 
 static void
@@ -2448,6 +2670,8 @@ run(void)
     else
         fetch_last_block_header();
 
+    fetch_view_key();
+
     timer_10m = evtimer_new(base, timer_on_10m, NULL);
     timer_on_10m(-1, EV_TIMEOUT, NULL);
 
@@ -2476,7 +2700,7 @@ cleanup(void)
     BN_CTX_free(bn_ctx);
     pthread_mutex_destroy(&mutex_clients);
     log_info("Pool shutdown successfully");
-    if (fd_log != NULL)
+    if (fd_log)
         fclose(fd_log);
 }
 
@@ -2525,19 +2749,19 @@ int main(int argc, char **argv)
     read_config(config_file, log_file, block_notified);
 
     log_set_level(LOG_FATAL - config.log_level);
-    if (config.log_file[0] != '\0')
+    if (config.log_file[0])
     {
         fd_log = fopen(config.log_file, "a");
-        if (fd_log == NULL)
+        if (!fd_log)
             log_info("Failed to open log file: %s", config.log_file);
         else
             log_set_fp(fd_log);
     }
 
-    if (config_file != NULL)
+    if (config_file)
         free(config_file);
 
-    if (log_file != NULL)
+    if (log_file)
         free(log_file);
 
     int err = 0;
@@ -2567,6 +2791,7 @@ int main(int argc, char **argv)
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
     uic.pool_port = config.pool_port;
+    uic.allow_self_select = !config.disable_self_select;
     uic.payment_threshold = config.payment_threshold;
     start_web_ui(&uic);
 

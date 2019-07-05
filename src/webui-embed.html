@@ -39,6 +39,7 @@
             <tr><td>Payment threshold: </td><td id="payment_threshold"></td></tr>
             <tr><td>Pool fee: </td><td id="pool_fee"></td></tr>
             <tr><td>Pool port: </td><td id="pool_port"></td></tr>
+            <tr><td>Allow self-select: </td><td id="allow_self_select"></td></tr>
             <tr><td>Miners connected: </td><td id="connected_miners"></td></tr>
             <tr class="wallet"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
             <tr class="wallet"><td>Balance due: </td><td id="miner_balance"></td></tr>
@@ -113,6 +114,8 @@
                         el.innerHTML = format_hashrate(stats[e]);
                     else if (e == "pool_fee")
                         el.innerHTML = (stats[e]*100) + "%";
+                    else if (e == "allow_self_select")
+                        el.innerHTML = stats[e] == 1 ? "Yes" : "No";
                     else
                         el.innerHTML = stats[e];
                 }

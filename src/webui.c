@@ -55,7 +55,7 @@ developers.
 #include "webui.h"
 
 #define TAG_MAX 17
-#define PAGE_MAX 4096
+#define PAGE_MAX 8192
 #define JSON_MAX 512
 
 extern unsigned char webui_html[];
@@ -76,6 +76,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
     uint64_t ltf = context->pool_stats->last_template_fetched;
     uint64_t lbf = context->pool_stats->last_block_found;
     uint32_t pbf = context->pool_stats->pool_blocks_found;
+    unsigned ss = context->allow_self_select;
     uint64_t mh = 0;
     double mb = 0.0;
     const char *wa = MHD_lookup_connection_value(connection,
@@ -96,12 +97,13 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             "\"payment_threshold\":%.2f,"
             "\"pool_fee\":%.3f,"
             "\"pool_port\":%d,"
+            "\"allow_self_select\":%u,"
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
             "\"miner_balance\":%.8f"
             "}", ph, nh, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
-            context->pool_port, context->pool_stats->connected_miners,
+            context->pool_port, ss, context->pool_stats->connected_miners,
             mh, mb);
     response = MHD_create_response_from_buffer(strlen(json),
             (void*) json, MHD_RESPMEM_MUST_COPY);

@@ -13,6 +13,10 @@ The single payout mechanism is PPLNS, which favors loyal pool miners.
 I have no plans to add any other payout mechanisms or other coins. Work should
 stay focussed on performance, efficiency and stability.
 
+The pool also now supports a new, experimental and optional, method of mining
+for the pool miners, whereby miners can select their *own* block template to
+mine on. Further information can be found in [stratum-ss.md](./stratum-ss.md).
+
 ## Project status
 
 I have tested this quite a bit on the Monero testnet (if you plan
@@ -133,6 +137,8 @@ pool software has), so if you use it and want to donate, XMR donations to:
 ```
 451ytzQg1vUVkuAW73VsQ72G96FUjASi4WNQse3v8ALfjiR5vLzGQ2hMUdYhG38Fi15eJ5FJ1ZL4EV1SFVi228muGX4f3SV
 ```
+
+![QR code](./qr-small.png)
 
 would be very much appreciated.
 

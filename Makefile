@@ -1,65 +1,60 @@
-define LICENSE
-
-Copyright (c) 2014-2019, The Monero Project
-
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation
-and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors
-may be used to endorse or promote products derived from this software without
-specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
-developers.
-
-endef
+#  Copyright (c) 2019, The Monero Project
+#  
+#  All rights reserved.
+#  
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#  
+#  1. Redistributions of source code must retain the above copyright notice,
+#  this list of conditions and the following disclaimer.
+#  
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#  this list of conditions and the following disclaimer in the documentation
+#  and/or other materials provided with the distribution.
+#  
+#  3. Neither the name of the copyright holder nor the names of its
+#  contributors may be used to endorse or promote products derived from this
+#  software without specific prior written permission.
+#  
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
 
 TARGET = monero-pool
 
 TYPE = debug
 
 ifeq ($(MAKECMDGOALS),release)
-TYPE = release
+  TYPE = release
 endif
 
-MONERO_BUILD_ROOT = ${MONERO_ROOT}/build/$(shell echo `uname | \
-					sed -e 's|[:/\\ \(\)]|_|g'`/`\
-					git -C ${MONERO_ROOT} branch | grep '\* ' | cut -f2- -d' '| \
-					sed -e 's|[:/\\ \(\)]|_|g'`)/release
+MONERO_BUILD_ROOT = \
+  ${MONERO_ROOT}/build/$(shell echo `uname | \
+  sed -e 's|[:/\\ \(\)]|_|g'`/` \
+  git -C ${MONERO_ROOT} branch | \
+  grep '\* ' | cut -f2- -d' '| \
+  sed -e 's|[:/\\ \(\)]|_|g'`)/release
 
-MONERO_INC = ${MONERO_ROOT}/src \
-			 ${MONERO_ROOT}/external/easylogging++ \
-			 ${MONERO_ROOT}/contrib/epee/include
+MONERO_INC = \
+  ${MONERO_ROOT}/src \
+  ${MONERO_ROOT}/external \
+  ${MONERO_ROOT}/external/easylogging++ \
+  ${MONERO_ROOT}/contrib/epee/include
 
 MONERO_LIBS = \
   ${MONERO_BUILD_ROOT}/src/cryptonote_basic/libcryptonote_basic.a \
-  ${MONERO_BUILD_ROOT}/src/cryptonote_core/libcryptonote_core.a \
   ${MONERO_BUILD_ROOT}/src/crypto/libcncrypto.a \
   ${MONERO_BUILD_ROOT}/src/common/libcommon.a \
-  ${MONERO_BUILD_ROOT}/src/ringct/libringct.a \
   ${MONERO_BUILD_ROOT}/src/ringct/libringct_basic.a \
   ${MONERO_BUILD_ROOT}/src/device/libdevice.a \
-  ${MONERO_BUILD_ROOT}/src/blockchain_db/libblockchain_db.a \
   ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
   ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a
 
@@ -70,48 +65,52 @@ OS := $(shell uname -s)
 CPPDEFS = _GNU_SOURCE AUTO_INITIALIZE_EASYLOGGINGPP LOG_USE_COLOR
 
 CCPARAM = -Wall $(CFLAGS) -maes -fPIC
-CXXFLAGS = -std=c++11
+CXXFLAGS = -std=c++11 -Wno-reorder
 
 ifeq ($(OS), Darwin)
-CXXFLAGS += -stdlib=libc++
-CPPDEFS += HAVE_MEMSET_S
+  CXXFLAGS += -stdlib=libc++
+  CPPDEFS += HAVE_MEMSET_S
 endif
 
 ifeq ($(OS),Darwin)
-LDPARAM = 
+  LDPARAM = 
 else
-LDPARAM = -Wl,-warn-unresolved-symbols -fPIC -pie
+  LDPARAM = -Wl,-warn-unresolved-symbols -fPIC -pie
 endif
 
 ifeq ($(TYPE),debug)
-CCPARAM += -g
-CPPDEFS += DEBUG
+  CCPARAM += -g
+  CPPDEFS += DEBUG
 endif
 
 ifeq ($(TYPE), release)
-CCPARAM += -O3 -Wno-unused-variable
-ifneq ($(OS), Darwin)
-LDPARAM = -Wl,--unresolved-symbols=ignore-in-object-files
-endif
+  CCPARAM += -O3 -Wno-unused-variable
+  ifneq ($(OS), Darwin)
+    LDPARAM = -Wl,--unresolved-symbols=ignore-in-object-files
+  endif
 endif
 
 LDPARAM += $(LDFLAGS)
 
 LIBS := lmdb pthread microhttpd unbound
 ifeq ($(OS), Darwin)
-LIBS += c++ boost_system-mt boost_date_time-mt boost_chrono-mt \
-		boost_filesystem-mt boost_thread-mt boost_regex-mt
+  LIBS += c++ \
+	  boost_system-mt boost_date_time-mt boost_chrono-mt \
+	  boost_filesystem-mt boost_thread-mt boost_regex-mt \
+	  boost_serialization-mt boost_program_options-mt
 else
-LIBS += dl boost_system boost_date_time boost_chrono boost_filesystem \
-		boost_thread boost_regex uuid
+  LIBS += dl uuid \
+	  boost_system boost_date_time boost_chrono \
+	  boost_filesystem boost_thread boost_regex \
+	  boost_serialization boost_program_options
 endif
 
 PKG_LIBS := $(shell pkg-config \
-    "libevent >= 2.1" \
-    json-c \
-    openssl \
-    libsodium \
-    --libs)
+  "libevent >= 2.1" \
+  json-c \
+  openssl \
+  libsodium \
+  --libs)
 
 STATIC_LIBS = 
 DLIBS =
@@ -119,11 +118,11 @@ DLIBS =
 INCPATH := $(DIRS) ${MONERO_INC} /opt/local/include /usr/local/include
 
 PKG_INC := $(shell pkg-config \
-    "libevent >= 2.1" \
-    json-c \
-    openssl \
-    libsodium \
-    --cflags)
+  "libevent >= 2.1" \
+  json-c \
+  openssl \
+  libsodium \
+  --cflags)
 
 LIBPATH := /opt/local/lib/ /usr/local/lib
 
@@ -150,36 +149,42 @@ SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 $(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
-	$(C++) -o $(STORE)/$(TARGET) $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) \
-		$(LDPARAM) $(MONERO_LIBS) \
-		$(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) \
-		$(foreach LIB,$(LIBPATH),-L$(LIB)) \
-		$(PKG_LIBS) $(STATIC_LIBS)
+	$(C++) -o $(STORE)/$(TARGET) \
+	  $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) \
+	  $(LDPARAM) $(MONERO_LIBS) \
+	  $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) \
+	  $(foreach LIB,$(LIBPATH),-L$(LIB)) \
+	  $(PKG_LIBS) $(STATIC_LIBS)
 	@cp pool.conf $(STORE)/
 	@cp tools/* $(STORE)/
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
 	$(C++) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(CXXFLAGS) \
-		$(foreach INC,$(INCPATH),-I$(INC)) \
-		$(PKG_INC) \
-		$(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) \
-		-c $< -o $@
-	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(STORE)/$*.dd > $(STORE)/$*.d
+	  $(foreach INC,$(INCPATH),-I$(INC)) \
+	  $(PKG_INC) \
+	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) \
+	  -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' \
+	  $(STORE)/$*.dd > $(STORE)/$*.d
 	@rm -f $(STORE)/$*.dd
 
 $(STORE)/%.o: %.c
 	@echo Creating object file for $*...
-	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC)\
-		$(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
-	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(STORE)/$*.dd > $(STORE)/$*.d
+	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) \
+	  $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC) \
+	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' \
+	  $(STORE)/$*.dd > $(STORE)/$*.d
 	@rm -f $(STORE)/$*.dd
 
 $(STORE)/%.o: %.S
 	@echo Creating object file for $*...
-	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC)\
-		$(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
-	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(STORE)/$*.dd > $(STORE)/$*.d
+	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) \
+	  $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC) \
+	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' \
+	  $(STORE)/$*.dd > $(STORE)/$*.d
 	@rm -f $(STORE)/$*.dd
 
 $(STORE)/%.o: %.html
@@ -202,17 +207,18 @@ clean:
 dirs:
 	@-if [ ! -e $(STORE) ]; then mkdir -p $(STORE); fi;
 	@-$(foreach DIR,$(DIRS), \
-		if [ ! -e $(STORE)/$(DIR) ]; then mkdir -p $(STORE)/$(DIR); fi; )
+	  if [ ! -e $(STORE)/$(DIR) ]; then mkdir -p $(STORE)/$(DIR); fi; )
 
 preflight:
 ifeq ($(origin MONERO_ROOT), undefined)
-	$(error You need to set an environment variable MONERO_ROOT to your monero repository root)
+  $(error You need to set an environment variable MONERO_ROOT \
+    to your monero repository root)
 endif
 ifndef PKG_LIBS
-	$(error Missing dependencies)
+  $(error Missing dependencies)
 endif
 ifndef XXD
-	$(error Command xxd not found)
+  $(error Command xxd not found)
 endif
 
 -include $(DFILES)
