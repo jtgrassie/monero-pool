@@ -68,10 +68,10 @@ developers.
 #include "log.h"
 #include "webui.h"
 
-#define MAX_LINE 4096
+#define MAX_LINE 8192
 #define POOL_CLIENTS_GROW 1024
-#define RPC_BODY_MAX 4096
-#define JOB_BODY_MAX 2048
+#define RPC_BODY_MAX 8192
+#define JOB_BODY_MAX 8192
 #define ERROR_BODY_MAX 512
 #define STATUS_BODY_MAX 256
 #define CLIENT_JOBS_MAX 4
@@ -2323,8 +2323,7 @@ client_on_read(struct bufferevent *bev, void *ctx)
     output = bufferevent_get_output(bev);
 
     size_t len = evbuffer_get_length(input);
-    if (len > MAX_LINE ||
-            (client->mode == MODE_SELF_SELECT && len > MAX_LINE<<2))
+    if (len > MAX_LINE)
     {
         const char *too_long = "Message too long\n";
         evbuffer_add(output, too_long, strlen(too_long));
