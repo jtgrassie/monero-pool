@@ -52,11 +52,18 @@ Next, in a third shell, run `monero-pool`. Instructions per the
 [README](./README.md#running).
 
 Lastly you'll need to run a miner that supports this new stratum mode (see
-above). If using [monero-powpy](https://github.com/jtgrassie/monero-powpy), just
-run `stratum-ss-miner.py`, optionally editing the parameters first.  If using
-[XMRig](https://github.com/jtgrassie/xmrig/tree/stratum-ss), edit your
-`config.json` file by setting the parameter `self-select` in your `pools` array
-(e.g. `"self-select": "localhost:28081"`).
+above):
+
+ - If using [monero-powpy](https://github.com/jtgrassie/monero-powpy), install
+   the requirements per the projects
+   [README](https://github.com/jtgrassie/monero-powpy/blob/master/README.md),
+   then just run the `stratum-ss-miner.py` miner, optionally editing the
+   parameters first.
+
+ - If using [XMRig](https://github.com/jtgrassie/xmrig/tree/stratum-ss), edit
+   your `config.json` file  setting the top level `algo` field to `"algo":
+   "cryptonight/r"` and setting the parameter `self-select` in your pool object
+   (e.g. `"self-select": "localhost:28081"`).
 
 ## Specification
 
