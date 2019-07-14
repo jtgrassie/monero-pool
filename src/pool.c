@@ -139,6 +139,7 @@ typedef struct config_t
     char log_file[MAX_PATH];
     bool block_notified;
     bool disable_self_select;
+    char data_dir[MAX_PATH];
 } config_t;
 
 typedef struct block_template_t
@@ -333,7 +334,7 @@ compare_payment(const MDB_val *a, const MDB_val *b)
 }
 
 static int
-database_init(void)
+database_init(const char* data_dir)
 {
     int rc;
     char *err;
@@ -342,7 +343,7 @@ database_init(void)
     rc = mdb_env_create(&env);
     mdb_env_set_maxdbs(env, (MDB_dbi) DB_COUNT_MAX);
     mdb_env_set_mapsize(env, DB_SIZE);
-    if ((rc = mdb_env_open(env, "./data", 0, 0664)) != 0)
+    if ((rc = mdb_env_open(env, data_dir, 0, 0664)) != 0)
     {
         err = mdb_strerror(rc);
         log_fatal("%s\n", err);
@@ -2458,7 +2459,8 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
 }
 
 static void
-read_config(const char *config_file, const char *log_file, bool block_notified)
+read_config(const char *config_file, const char *log_file, bool block_notified,
+        const char *data_dir)
 {
     /* Start with some defaults for any missing... */
     strncpy(config.rpc_host, "127.0.0.1", 10);
@@ -2473,6 +2475,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
     config.webui_port = 4243;
     config.block_notified = block_notified;
     config.disable_self_select = false;
+    strncpy(config.data_dir, "./data", 7);
 
     char path[MAX_PATH] = {0};
     if (config_file)
@@ -2584,11 +2587,17 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
         {
             config.disable_self_select = atoi(val);
         }
+        else if (strcmp(key, "data-dir") == 0)
+        {
+            strncpy(config.data_dir, val,  sizeof(config.data_dir));
+        }
     }
     fclose(fp);
 
     if (log_file)
         strncpy(config.log_file, log_file, sizeof(config.log_file));
+    if (data_dir)
+        strncpy(config.data_dir, data_dir, sizeof(config.data_dir));
 
     if (!config.pool_wallet[0])
     {
@@ -2601,6 +2610,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
                 "Aborting.");
         abort();
     }
+
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  "
             "rpc_timeout = %u\n  pool_wallet = %s\n  "
             "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  "
@@ -2608,13 +2618,15 @@ read_config(const char *config_file, const char *log_file, bool block_notified)
             "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
             "log_level = %u\n  webui_port=%u\n  "
             "log-file = %s\n  block-notified = %u\n  "
-            "disable-self-select = %u\n",
+            "disable-self-select = %u\n  "
+            "data-dir = %s\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
             config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
             config.log_level, config.webui_port,
-            config.log_file, config.block_notified, config.disable_self_select);
+            config.log_file, config.block_notified, config.disable_self_select,
+            config.data_dir);
 }
 
 static void
@@ -2736,16 +2748,18 @@ int main(int argc, char **argv)
         {"config-file", required_argument, 0, 'c'},
         {"log-file", required_argument, 0, 'l'},
         {"block-notified", optional_argument, 0, 'b'},
+        {"data-dir", required_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
     char *config_file = NULL;
     char *log_file = NULL;
     bool block_notified = false;
+    char *data_dir = NULL;
     int c;
     while (1)
     {
         int option_index = 0;
-        c = getopt_long (argc, argv, "c:l:b::",
+        c = getopt_long (argc, argv, "c:l:b:d:",
                        options, &option_index);
         if (c == -1)
             break;
@@ -2762,9 +2776,19 @@ int main(int argc, char **argv)
                 if (optarg)
                     block_notified = atoi(optarg);
                 break;
+            case 'd':
+                data_dir = strdup(optarg);
+                break;
         }
     }
-    read_config(config_file, log_file, block_notified);
+    read_config(config_file, log_file, block_notified, data_dir);
+
+    if (config_file)
+        free(config_file);
+    if (log_file)
+        free(log_file);
+    if (data_dir)
+        free(data_dir);
 
     log_set_level(LOG_FATAL - config.log_level);
     if (config.log_file[0])
@@ -2776,14 +2800,8 @@ int main(int argc, char **argv)
             log_set_fp(fd_log);
     }
 
-    if (config_file)
-        free(config_file);
-
-    if (log_file)
-        free(log_file);
-
     int err = 0;
-    if ((err = database_init()) != 0)
+    if ((err = database_init(config.data_dir)) != 0)
     {
         log_fatal("Failed to initialize database. Return code: %d", err);
         goto cleanup;
