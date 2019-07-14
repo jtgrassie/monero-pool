@@ -88,6 +88,7 @@ developers.
 #define BLOCK_TIME 120
 #define HR_BLOCK_COUNT 5
 #define TEMLATE_HEIGHT_VARIANCE 5
+#define MAX_BAD_SHARES 5
 
 #define uint128_t unsigned __int128
 
@@ -176,6 +177,7 @@ typedef struct client_t
     time_t connected_since;
     bool is_proxy;
     uint32_t mode;
+    uint8_t bad_shares;
 } client_t;
 
 typedef struct pool_clients_t
@@ -2224,7 +2226,7 @@ client_on_submit(json_object *message, client_t *client)
         stratum_get_error_body(body, client->json_id, "Invalid share");
         evbuffer_add(output, body, strlen(body));
         log_debug("Invalid share");
-        /* TODO: record and ban if too many */
+        client->bad_shares++;
         free(block);
         free(hashing_blob);
         return;
@@ -2279,8 +2281,9 @@ client_on_submit(json_object *message, client_t *client)
         can_store = false;
         char body[ERROR_BODY_MAX];
         stratum_get_error_body(body, client->json_id, "Low difficulty share");
-        log_debug("Low difficulty (%lu) share", BN_get_word(jd));
         evbuffer_add(output, body, strlen(body));
+        log_debug("Low difficulty (%lu) share", BN_get_word(jd));
+        client->bad_shares++;
     }
 
     BN_free(hd);
@@ -2291,6 +2294,8 @@ client_on_submit(json_object *message, client_t *client)
 
     if (can_store)
     {
+        if (client->bad_shares)
+            client->bad_shares--;
         share_t share;
         share.height = bt->height;
         share.difficulty = job->target;
@@ -2309,7 +2314,9 @@ client_on_submit(json_object *message, client_t *client)
 static void
 client_on_read(struct bufferevent *bev, void *ctx)
 {
-    const char unknown_method[] = "Unknown method";
+    const char *unknown_method = "Removing client. Unknown method called.";
+    const char *too_bad = "Removing client. Too many bad shares.";
+    const char *too_long = "Removing client. Message too long.";
     struct evbuffer *input, *output;
     char *line;
     size_t n;
@@ -2325,9 +2332,21 @@ client_on_read(struct bufferevent *bev, void *ctx)
     size_t len = evbuffer_get_length(input);
     if (len > MAX_LINE)
     {
-        const char *too_long = "Message too long\n";
-        evbuffer_add(output, too_long, strlen(too_long));
-        log_info("Removing client. Message too long.");
+        char body[ERROR_BODY_MAX];
+        stratum_get_error_body(body, client->json_id, too_long);
+        evbuffer_add(output, body, strlen(body));
+        log_info(too_long);
+        evbuffer_drain(input, len);
+        client_clear(bev);
+        return;
+    }
+
+    if (client->bad_shares > MAX_BAD_SHARES)
+    {
+        char body[ERROR_BODY_MAX];
+        stratum_get_error_body(body, client->json_id, too_bad);
+        evbuffer_add(output, body, strlen(body));
+        log_info(too_bad);
         evbuffer_drain(input, len);
         client_clear(bev);
         return;
@@ -2382,7 +2401,7 @@ client_on_read(struct bufferevent *bev, void *ctx)
             char body[ERROR_BODY_MAX];
             stratum_get_error_body(body, client->json_id, unknown_method);
             evbuffer_add(output, body, strlen(body));
-            log_info("Removing client. Unknown method called.");
+            log_info(unknown_method);
             evbuffer_drain(input, len);
             client_clear(bev);
             return;
