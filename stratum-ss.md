@@ -61,9 +61,9 @@ above):
    parameters first.
 
  - If using [XMRig](https://github.com/jtgrassie/xmrig/tree/stratum-ss), edit
-   your `config.json` file  setting the top level `algo` field to `"algo":
-   "cryptonight/r"` and setting the parameter `self-select` in your pool object
-   (e.g. `"self-select": "localhost:28081"`).
+   your pool object in your `config.json` file setting the `algo` field to
+   `"algo": "cryptonight/r"` and setting the `self-select` field to your daemon
+   address (e.g. `"self-select": "localhost:28081"`).
 
 ## Specification
 
