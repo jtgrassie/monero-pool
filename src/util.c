@@ -58,12 +58,12 @@ is_hex_string(const char *str)
 
 void
 hex_to_bin(const char *hex, const size_t hex_len,
-        char *bin, const size_t bin_size)
+        unsigned char *bin, const size_t bin_size)
 {
     assert(hex_len % 2 == 0);
     assert(bin_size >= hex_len >> 1);
     const char *ph = hex;
-    char *end = bin + bin_size;
+    unsigned char *end = bin + bin_size;
     while (*ph && bin < end)
     {
         sscanf(ph, "%2hhx", bin++);    
@@ -72,13 +72,13 @@ hex_to_bin(const char *hex, const size_t hex_len,
 }
 
 void
-bin_to_hex(const char *bin, const size_t bin_size,
+bin_to_hex(const unsigned char *bin, const size_t bin_size,
         char *hex, const size_t hex_size)
 {
     assert(bin_size << 1 == hex_size);
     const char *hex_chars = "0123456789abcdef";
     char *ph = hex;
-    const char *pb = bin;
+    const unsigned char *pb = bin;
     for (size_t i=0; i<bin_size; i++)
     {
         *ph++ = hex_chars[(*pb >> 4) & 0xF];
@@ -87,11 +87,11 @@ bin_to_hex(const char *bin, const size_t bin_size,
 }
 
 void
-reverse_bin(char *bin, const size_t len)
+reverse_bin(unsigned char *bin, const size_t len)
 {
     size_t start = 0;
     size_t end = len-1;
-    char temp;
+    unsigned char temp;
     while (start < end)
     {
         temp = bin[start];
@@ -102,7 +102,8 @@ reverse_bin(char *bin, const size_t len)
     }
 }
 
-char *stecpy(char *dst, const char *src, const char *end)
+char *
+stecpy(char *dst, const char *src, const char *end)
 {
     while (*src && dst < end)
         *dst++ = *src++;

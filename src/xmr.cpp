@@ -56,11 +56,11 @@ using namespace epee::string_tools;
 using namespace cryptonote;
 using namespace crypto;
 
-int get_hashing_blob(const char *input, const size_t in_size,
-        char **output, size_t *out_size)
+int get_hashing_blob(const unsigned char *input, const size_t in_size,
+        unsigned char **output, size_t *out_size)
 {
     block b = AUTO_VAL_INIT(b);
-    blobdata bd = std::string(input, in_size);    
+    blobdata bd = std::string((const char*)input, in_size);
     if (!parse_and_validate_block_from_blob(bd, b))
     {
         return XMR_PARSE_ERROR;
@@ -68,12 +68,13 @@ int get_hashing_blob(const char *input, const size_t in_size,
 
     blobdata blob = get_block_hashing_blob(b);
     *out_size = blob.length();
-    *output = (char*) malloc(*out_size);
+    *output = (unsigned char*) malloc(*out_size);
     memcpy(*output, blob.data(), *out_size);
     return XMR_NO_ERROR;
 }
 
-int parse_address(const char *input, uint64_t *prefix, char *pub_spend)
+int parse_address(const char *input, uint64_t *prefix,
+        unsigned char *pub_spend)
 {
     uint64_t tag;
     std::string decoded;
@@ -92,15 +93,16 @@ int parse_address(const char *input, uint64_t *prefix, char *pub_spend)
     return rv ? XMR_NO_ERROR : XMR_PARSE_ERROR;
 }
 
-void get_hash(const char *input, const size_t in_size,
-        char **output, int variant, uint64_t height)
+void get_hash(const unsigned char *input, const size_t in_size,
+        unsigned char **output, int variant, uint64_t height)
 {
     cn_slow_hash(input, in_size,
             reinterpret_cast<hash&>(*output), variant, height);
 }
 
-int validate_block_from_blob(const char *blob_hex, const char *sec_view,
-        const char *pub_spend)
+int validate_block_from_blob(const char *blob_hex,
+        const unsigned char *sec_view,
+        const unsigned char *pub_spend)
 {
     /*
       The only validation needed is that the data parses to a block and the

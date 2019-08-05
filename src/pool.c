@@ -243,8 +243,8 @@ static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
 static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
-static char sec_view[32];
-static char pub_spend[32];
+static unsigned char sec_view[32];
+static unsigned char pub_spend[32];
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
@@ -810,7 +810,7 @@ target_to_hex(uint64_t target, char *target_hex)
     if (target & 0xFFFFFFFF00000000)
     {
         log_debug("High target requested: %"PRIu64, target);
-        bin_to_hex((const char*)&target, 8, &target_hex[0], 16);
+        bin_to_hex((const unsigned char*)&target, 8, &target_hex[0], 16);
         return;
     }
     BIGNUM *diff = BN_new();
@@ -818,14 +818,14 @@ target_to_hex(uint64_t target, char *target_hex)
 #ifdef SIXTY_FOUR_BIT_LONG
     BN_set_word(bnt, target);
 #else
-    char st[24];
-    snprintf(st, 24, "%"PRIu64, target);
-    BN_dec2bn(&bnt, st);
+    char tmp[24];
+    snprintf(tmp, 24, "%"PRIu64, target);
+    BN_dec2bn(&bnt, tmp);
 #endif
     BN_div(diff, NULL, base_diff, bnt, bn_ctx);
     BN_rshift(diff, diff, 224);
     uint32_t w = BN_get_word(diff);
-    bin_to_hex((const char*)&w, 4, &target_hex[0], 8);
+    bin_to_hex((const unsigned char*)&w, 4, &target_hex[0], 8);
     BN_free(bnt);
     BN_free(diff);
 }
@@ -838,7 +838,7 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
     char job_id[33] = {0};
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
@@ -885,11 +885,11 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
     char job_id[33] = {0};
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
-    char extra_bin[8];
+    unsigned char extra_bin[8];
     memcpy(extra_bin, &job->extra_nonce, 4);
     memcpy(extra_bin+4, &instance_id, 4);
     char extra_hex[17] = {0};
@@ -924,7 +924,7 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
     const char *client_id = client->client_id;
     const job_t *job = &client->active_jobs[0];
     char job_id[33] = {0};
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     const char *blob = job->blob;
     uint64_t target = job->target;
     uint64_t height = job->block_template->height;
@@ -1013,7 +1013,7 @@ static job_t *
 client_find_job(client_t *client, const char *job_id)
 {
     uuid_t jid;
-    hex_to_bin(job_id, strlen(job_id), (char*)&jid, sizeof(uuid_t));
+    hex_to_bin(job_id, strlen(job_id), (unsigned char*)&jid, sizeof(uuid_t));
     for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
     {
         job_t *job = &client->active_jobs[i];
@@ -1090,11 +1090,11 @@ client_send_job(client_t *client, bool response)
 
     /* Convert template to blob */
     size_t bin_size = strlen(bt->blocktemplate_blob) >> 1;
-    char *block = calloc(bin_size, sizeof(char));
+    unsigned char *block = calloc(bin_size, sizeof(char));
     hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
 
     /* Set the extra nonce in our reserved space */
-    char *p = block;
+    unsigned char *p = block;
     p += bt->reserved_offset;
     ++extra_nonce;
     memcpy(p, &extra_nonce, sizeof(extra_nonce));
@@ -1106,7 +1106,7 @@ client_send_job(client_t *client, bool response)
 
     /* Get hashong blob */
     size_t hashing_blob_size;
-    char *hashing_blob = NULL;
+    unsigned char *hashing_blob = NULL;
     get_hashing_blob(block, bin_size, &hashing_blob, &hashing_blob_size);
 
     /* Make hex */
@@ -1123,7 +1123,7 @@ client_send_job(client_t *client, bool response)
 
     /* Send */
     char job_id[33] = {0};
-    bin_to_hex((const char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), &job_id[0], 32);
 
     /* Retarget */
     retarget(client, job);
@@ -1296,20 +1296,20 @@ rpc_wallet_request(struct event_base *base, const char *body,
 }
 
 static void
-rpc_get_request_body(char *body, const char* method, char* fmt, ...)
+rpc_get_request_body(char *body, const char *method, char *fmt, ...)
 {
     char *pb = body;
+    char *end = body + RPC_BODY_MAX;
 
-    snprintf(pb, RPC_BODY_MAX, "%s%s%s", "{\"jsonrpc\":\"2.0\",\"id\":\"0\","
-            "\"method\":\"", method, "\"");
-    pb += strlen(pb);
+    pb = stecpy(pb, "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"", end);
+    pb = stecpy(pb, method, end);
+    pb = stecpy(pb, "\"", end);
 
     if (fmt && *fmt)
     {
         char *s;
         uint64_t d;
-        snprintf(pb, RPC_BODY_MAX - strlen(body), "%s", ",\"params\":{");
-        pb += strlen(pb);
+        pb = stecpy(pb, ",\"params\":{", end);
         va_list args;
         va_start(args, fmt);
         uint8_t count = 0;
@@ -1319,13 +1319,15 @@ rpc_get_request_body(char *body, const char* method, char* fmt, ...)
             {
                 case 's':
                     s = va_arg(args, char *);
-                    snprintf(pb, RPC_BODY_MAX - strlen(body), "\"%s\"", s);
-                    pb += strlen(pb);
+                    pb = stecpy(pb, "\"", end);
+                    pb = stecpy(pb, s, end);
+                    pb = stecpy(pb, "\"", end);
                     break;
                 case 'd':
                     d = va_arg(args, uint64_t);
-                    snprintf(pb, RPC_BODY_MAX - strlen(body), "%"PRIu64, d);
-                    pb += strlen(pb);
+                    char tmp[24];
+                    snprintf(tmp, 24, "%"PRIu64, d);
+                    pb = stecpy(pb, tmp, end);
                     break;
             }
             *pb++ = count++ % 2 ? ',' : ':';
@@ -2013,7 +2015,7 @@ client_on_login(json_object *message, client_t *client)
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id));
     uuid_t cid;
     uuid_generate(cid);
-    bin_to_hex((const char*)cid, sizeof(uuid_t), client->client_id, 32);
+    bin_to_hex((const unsigned char*)cid, sizeof(uuid_t), client->client_id, 32);
     client_send_job(client, true);
 }
 
@@ -2133,10 +2135,10 @@ client_on_submit(json_object *message, client_t *client)
         bt = job->block_template;
     char *btb = bt->blocktemplate_blob;
     size_t bin_size = strlen(btb) >> 1;
-    char *block = calloc(bin_size, sizeof(char));
+    unsigned char *block = calloc(bin_size, sizeof(char));
     hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
 
-    char *p = block;
+    unsigned char *p = block;
     uint32_t pool_nonce = 0;
     uint32_t worker_nonce = 0;
 
@@ -2200,7 +2202,7 @@ client_on_submit(json_object *message, client_t *client)
 
     /* Get hashong blob */
     size_t hashing_blob_size;
-    char *hashing_blob = NULL;
+    unsigned char *hashing_blob = NULL;
     if (get_hashing_blob(block, bin_size,
                 &hashing_blob, &hashing_blob_size) != 0)
     {
@@ -2213,12 +2215,12 @@ client_on_submit(json_object *message, client_t *client)
     }
 
     /* Hash and compare */
-    char result_hash[32];
-    char submitted_hash[32];
+    unsigned char result_hash[32] = {0};
+    unsigned char submitted_hash[32] = {0};
     uint8_t major_version = (uint8_t)block[0];
     const int cn_variant = major_version >= 7 ? major_version - 6 : 0;
     get_hash(hashing_blob, hashing_blob_size,
-            (char**)&result_hash, cn_variant, bt->height);
+            (unsigned char**)&result_hash, cn_variant, bt->height);
     hex_to_bin(result_hex, 64, submitted_hash, 32);
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)

@@ -50,13 +50,15 @@ enum xmr_error
     XMR_MISMATCH_ERROR   = -6
 };
 
-int get_hashing_blob(const char *input, const size_t in_size,
-        char **output, size_t *out_size);
-int parse_address(const char *input, uint64_t *prefix, char *pub_spend);
-void get_hash(const char *input, const size_t in_size,
-        char **output, int variant, uint64_t height);
-int validate_block_from_blob(const char *blob_hex, const char *sec_view,
-        const char *pub_spend);
+int get_hashing_blob(const unsigned char *input, const size_t in_size,
+        unsigned char **output, size_t *out_size);
+int parse_address(const char *input, uint64_t *prefix,
+        unsigned char *pub_spend);
+void get_hash(const unsigned char *input, const size_t in_size,
+        unsigned char **output, int variant, uint64_t height);
+int validate_block_from_blob(const char *blob_hex,
+        const unsigned char *sec_view,
+        const unsigned char *pub_spend);
 
 #ifdef __cplusplus
 }
