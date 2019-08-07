@@ -64,30 +64,27 @@ OS := $(shell uname -s)
 
 CPPDEFS = _GNU_SOURCE AUTO_INITIALIZE_EASYLOGGINGPP LOG_USE_COLOR
 
-CCPARAM = -Wall $(CFLAGS) -maes -fPIC
-CXXFLAGS = -std=c++11 -Wno-reorder
+W = -W -Wall -Wno-unused-parameter -Wuninitialized
+OPT = -maes -fPIC
+CFLAGS = $(W) -Wbad-function-cast $(OPT) -std=c99
+CXXFLAGS = $(W) -Wno-reorder $(OPT) -std=c++11
+LDPARAM = -fPIC -pie
 
 ifeq ($(OS), Darwin)
   CXXFLAGS += -stdlib=libc++
   CPPDEFS += HAVE_MEMSET_S
-endif
-
-ifeq ($(OS),Darwin)
   LDPARAM = 
-else
-  LDPARAM = -Wl,-warn-unresolved-symbols -fPIC -pie
 endif
 
 ifeq ($(TYPE),debug)
-  CCPARAM += -g
+  CFLAGS += -g
+  CXXFLAGS += -g
   CPPDEFS += DEBUG
 endif
 
 ifeq ($(TYPE), release)
-  CCPARAM += -O3 -Wno-unused-variable
-  ifneq ($(OS), Darwin)
-    LDPARAM = -Wl,--unresolved-symbols=ignore-in-object-files
-  endif
+  CFLAGS += -O3
+  CXXFLAGS += -O3
 endif
 
 LDPARAM += $(LDFLAGS)
@@ -160,7 +157,7 @@ $(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
-	$(C++) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) $(CXXFLAGS) \
+	$(C++) -Wp,-MMD,$(STORE)/$*.dd $(CXXFLAGS) \
 	  $(foreach INC,$(INCPATH),-I$(INC)) \
 	  $(PKG_INC) \
 	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) \
@@ -171,7 +168,7 @@ $(STORE)/%.o: %.cpp
 
 $(STORE)/%.o: %.c
 	@echo Creating object file for $*...
-	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) \
+	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CFLAGS) \
 	  $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC) \
 	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' \
@@ -180,7 +177,7 @@ $(STORE)/%.o: %.c
 
 $(STORE)/%.o: %.S
 	@echo Creating object file for $*...
-	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CCPARAM) \
+	$(CC) -Wp,-MMD,$(STORE)/$*.dd $(CFLAGS) \
 	  $(foreach INC,$(INCPATH),-I$(INC)) $(PKG_INC) \
 	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' \
@@ -190,7 +187,7 @@ $(STORE)/%.o: %.S
 $(STORE)/%.o: %.html
 	@echo Creating object file for $*...
 	xxd -i $< | sed -e 's/src_//' -e 's/embed_//' > $(STORE)/$*.c
-	$(CC) $(CCPARAM)  -c $(STORE)/$*.c -o $@
+	$(CC) $(CFLAGS)  -c $(STORE)/$*.c -o $@
 	@rm -f $(STORE)/$*.c
 
 # Empty rule to prevent problems when a header is deleted.

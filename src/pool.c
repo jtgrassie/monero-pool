@@ -248,10 +248,14 @@ static unsigned char pub_spend[32];
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
-    if (!json_object_object_get_ex(parent, #name, &name))            \
-        return send_validation_error(client, #name " not found");    \
-    if (!json_object_is_type(name, type))                            \
-        return send_validation_error(client, #name " not a " #type);
+    if (!json_object_object_get_ex(parent, #name, &name)) {          \
+        send_validation_error(client, #name " not found");           \
+        return;                                                      \
+    }                                                                \
+    if (!json_object_is_type(name, type)) {                          \
+        send_validation_error(client, #name " not a " #type);        \
+        return;                                                      \
+    }
 
 #define JSON_GET_OR_WARN(name, parent, type)                         \
     json_object *name = NULL;                                        \
@@ -406,7 +410,7 @@ database_close(void)
     mdb_dbi_close(env, db_blocks);
     mdb_dbi_close(env, db_balance);
     mdb_dbi_close(env, db_payments);
-    return mdb_env_close(env);
+    mdb_env_close(env);
 }
 
 static int
@@ -692,7 +696,7 @@ process_blocks(block_t *blocks, size_t count)
         return rc;
     }
 
-    for (int i=0; i<count; i++)
+    for (size_t i=0; i<count; i++)
     {
         block_t *ib = &blocks[i];
         log_trace("Processing block at height %"PRIu64, ib->height);
@@ -1403,7 +1407,7 @@ rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(headers, result, json_type_array);
     size_t headers_len = json_object_array_length(headers);
     assert(headers_len == BLOCK_HEADERS_RANGE);
-    for (int i=0; i<headers_len; i++)
+    for (size_t i=0; i<headers_len; i++)
     {
         json_object *header = json_object_array_get_idx(headers, i);
         block_t *bh = &block_headers_range[i];
@@ -1975,8 +1979,9 @@ client_on_login(json_object *message, client_t *client)
             {
                 if (config.disable_self_select)
                 {
-                    return send_validation_error(client,
+                    send_validation_error(client,
                             "pool disabled self-select");
+                    return;
                 }
                 client->mode = MODE_SELF_SELECT;
                 log_trace("Client login for mode: self-select");
@@ -1988,8 +1993,11 @@ client_on_login(json_object *message, client_t *client)
     uint64_t prefix;
     parse_address(address, &prefix, NULL);
     if (prefix != MAINNET_ADDRESS_PREFIX && prefix != TESTNET_ADDRESS_PREFIX)
-        return send_validation_error(client,
+    {
+        send_validation_error(client,
                 "login only main wallet addresses are supported");
+        return;
+    }
 
     const char *worker_id = json_object_get_string(pass);
 
@@ -2007,8 +2015,9 @@ client_on_login(json_object *message, client_t *client)
 
     if (client->is_proxy && client->mode == MODE_SELF_SELECT)
     {
-        return send_validation_error(client,
+        send_validation_error(client,
                 "login mode self-select and proxy not yet supported");
+        return;
     }
 
     strncpy(client->address, address, sizeof(client->address));
@@ -2034,7 +2043,10 @@ client_on_block_template(json_object *message, client_t *client)
 
     const char *jid = json_object_get_string(job_id);
     if (strlen(jid) != 32)
-        return send_validation_error(client, "job_id invalid length");
+    {
+        send_validation_error(client, "job_id invalid length");
+        return;
+    }
 
     int64_t h = json_object_get_int64(height);
     int64_t dh = llabs(h - (int64_t)pool_stats.network_height);
@@ -2042,7 +2054,8 @@ client_on_block_template(json_object *message, client_t *client)
     {
         char m[64];
         snprintf(m, 64, "Bad height. Differs to pool by %"PRIu64" blocks.", dh);
-        return send_validation_error(client, m);
+        send_validation_error(client, m);
+        return;
     }
 
     const char *btb = json_object_get_string(blob);
@@ -2050,15 +2063,22 @@ client_on_block_template(json_object *message, client_t *client)
     if (rc != 0)
     {
         log_warn("Bad template submitted: %d", rc);
-        return send_validation_error(client, "block template blob invalid");
+        send_validation_error(client, "block template blob invalid");
+        return;
     }
 
     job_t *job = client_find_job(client, jid);
     if (!job)
-        return send_validation_error(client, "cannot find job with job_id");
+    {
+        send_validation_error(client, "cannot find job with job_id");
+        return;
+    }
 
     if (job->miner_template)
-        return send_validation_error(client, "job already has block template");
+    {
+        send_validation_error(client, "job already has block template");
+        return;
+    }
 
     job->miner_template = calloc(1, sizeof(block_template_t));
     job->miner_template->blocktemplate_blob = strdup(btb);
@@ -2088,22 +2108,37 @@ client_on_submit(json_object *message, client_t *client)
     errno = 0;
     unsigned long int uli = strtoul(nptr, &endptr, 16);
     if (errno != 0 || nptr == endptr)
-        return send_validation_error(client, "nonce not an unsigned long int");
+    {
+        send_validation_error(client, "nonce not an unsigned long int");
+        return;
+    }
     const uint32_t result_nonce = ntohl(uli);
 
     const char *result_hex = json_object_get_string(result);
     if (strlen(result_hex) != 64)
-        return send_validation_error(client, "result invalid length");
+    {
+        send_validation_error(client, "result invalid length");
+        return;
+    }
     if (is_hex_string(result_hex) != 0)
-        return send_validation_error(client, "result not hex string");
+    {
+        send_validation_error(client, "result not hex string");
+        return;
+    }
 
     const char *jid = json_object_get_string(job_id);
     if (strlen(jid) != 32)
-        return send_validation_error(client, "job_id invalid length");
+    {
+        send_validation_error(client, "job_id invalid length");
+        return;
+    }
 
     job_t *job = client_find_job(client, jid);
     if (!job)
-        return send_validation_error(client, "cannot find job with job_id");
+    {
+        send_validation_error(client, "cannot find job with job_id");
+        return;
+    }
 
     log_trace("Client submitted nonce=%u, result=%s",
             result_nonce, result_hex);
@@ -2127,7 +2162,10 @@ client_on_submit(json_object *message, client_t *client)
 
     /* Convert template to blob */
     if (client->mode == MODE_SELF_SELECT && !job->miner_template)
-        return send_validation_error(client, "mode self-selct and no template");
+    {
+        send_validation_error(client, "mode self-selct and no template");
+        return;
+    }
     block_template_t *bt;
     if (job->miner_template)
         bt = job->miner_template;
