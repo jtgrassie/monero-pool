@@ -22,29 +22,21 @@ simple miner, [monero-powpy](https://github.com/jtgrassie/monero-powpy)
 
 ## Building
 
-First you'll need to compile the Monero master branch with pull request
-[#5728](https://github.com/monero-project/monero/pull/5728). For example:
-
-    cd "$MONERO_ROOT"
-    git fetch origin pull/5728/head:pr-5728
-    git checkout -b stratum-ss
-    git rebase pr-5728
-    make release
-
-Now proceed to building the pool as per the instructions in the
-[README](./README.md#compiling-from-source).
+The only variation to the standard build instructions in the
+[README](./README.md#compiling-from-source), is that you'll first need to fetch
+and compile the latest Monero ***master*** branch.
 
 ## Running
 
-Start your newly patched and compiled `monerod` and `monero-wallet-rpc`. For
-example, in one shell:
+Start your newly compiled `monerod` and `monero-wallet-rpc`. For example, in one
+shell:
 
-    cd "$MONERO_ROOT"/build/Linux/stratum-ss/release/bin
+    cd "$MONERO_ROOT"/build/Linux/master/release/bin
     ./monerod --testnet
 
 And in another shell:
 
-    cd "$MONERO_ROOT"/build/Linux/stratum-ss/release/bin
+    cd "$MONERO_ROOT"/build/Linux/master/release/bin
     ./monero-wallet-rpc --testnet --rpc-bind-port 28084 --disable-rpc-login \
         --password "" --wallet-file ~/testnet-pool-wallet
 
