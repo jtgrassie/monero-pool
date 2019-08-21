@@ -572,7 +572,12 @@ balance_add(const char *address, uint64_t amount, MDB_txn *parent)
     {
         log_trace("Adding new balance entry");
         MDB_val new_val = { sizeof(amount), (void*)&amount };
-        mdb_cursor_put(cursor, &key, &new_val, MDB_APPEND);
+        rc = mdb_cursor_put(cursor, &key, &new_val, 0);
+        if (rc != 0)
+        {
+            err = mdb_strerror(rc);
+            log_error("%s", err);
+        }
     }
     else if (rc == 0)
     {
@@ -663,6 +668,8 @@ payout_block(block_t *block, MDB_txn *parent)
         rc = balance_add(share->address, amount, txn);
         if (rc != 0)
         {
+            err = mdb_strerror(rc);
+            log_error("%s", err);
             mdb_cursor_close(cursor);
             mdb_txn_abort(txn);
             return rc;
