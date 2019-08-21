@@ -105,13 +105,15 @@ void get_rx_hash(const unsigned char *input, const size_t in_size,
         unsigned char *output, const unsigned char *seed_hash,
         const uint64_t height)
 {
-    static unsigned max_concurrency = 1;//tools::get_max_concurrency();
+#ifdef HAVE_RX
+    static unsigned max_concurrency = tools::get_max_concurrency();
     uint64_t seed_height;
     if (rx_needhash(height, &seed_height))
     {
         rx_seedhash(seed_height, (const char*)seed_hash, max_concurrency);
     }
     rx_slow_hash((const char*)input, in_size, (char*)output, max_concurrency);
+#endif
 }
 
 int validate_block_from_blob(const char *blob_hex,

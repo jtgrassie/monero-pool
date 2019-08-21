@@ -248,8 +248,13 @@ static FILE *fd_log;
 static unsigned char sec_view[32];
 static unsigned char pub_spend[32];
 
+#ifdef HAVE_RX
 extern void rx_stop_mining();
 extern void rx_slow_hash_free_state();
+#else
+void rx_stop_mining(){}
+void rx_slow_hash_free_state(){}
+#endif
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
