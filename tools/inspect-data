@@ -115,6 +115,22 @@ def print_mined(path):
                 print('{}\t{}\t{}\t{}'.format(height, status, reward, dt))
     env.close()
 
+def print_shares(path):
+    env = lmdb.open(path, readonly=True, max_dbs=1, create=False)
+    shares = env.open_db('shares'.encode(), dupsort=True)
+    with env.begin(db=shares) as txn:
+        with txn.cursor() as curs:
+            curs.last()
+            for i in range(10):
+                key, value = curs.item()
+                height = c_longlong.from_buffer_copy(key).value
+                share = share_t.from_buffer_copy(value)
+                address = format_address(address_from_key(share.address))
+                print('{}\t{}'.format(height, address))
+                if not curs.prev():
+                    break
+    env.close()
+
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
@@ -124,6 +140,8 @@ def main():
             help='list payments made')
     group.add_argument('-m', '--mined', action='store_true',
             help='list mined blocks')
+    group.add_argument('-s', '--shares', action='store_true',
+            help='list recent shares')
     parser.add_argument('database', help='path to database')
     args = parser.parse_args()
     if args.balances:
@@ -132,6 +150,8 @@ def main():
         print_payements(args.database)
     elif args.mined:
         print_mined(args.database)
+    elif args.shares:
+        print_shares(args.database)
 
 if __name__ == '__main__':
     main()

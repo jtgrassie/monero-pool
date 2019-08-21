@@ -48,6 +48,7 @@ developers.
 #include "serialization/binary_utils.h"
 #include "ringct/rctSigs.h"
 #include "common/base58.h"
+#include "common/util.h"
 #include "string_tools.h"
 
 #include "xmr.h"
@@ -94,10 +95,25 @@ int parse_address(const char *input, uint64_t *prefix,
 }
 
 void get_hash(const unsigned char *input, const size_t in_size,
-        unsigned char **output, int variant, uint64_t height)
+        unsigned char *output, int variant, uint64_t height)
 {
     cn_slow_hash(input, in_size,
             reinterpret_cast<hash&>(*output), variant, height);
+}
+
+void get_rx_hash(const unsigned char *input, const size_t in_size,
+        unsigned char *output, const unsigned char *seed_hash,
+        const uint64_t height)
+{
+#ifdef HAVE_RX
+    static unsigned max_concurrency = tools::get_max_concurrency();
+    uint64_t seed_height;
+    if (rx_needhash(height, &seed_height))
+    {
+        rx_seedhash(seed_height, (const char*)seed_hash, max_concurrency);
+    }
+    rx_slow_hash((const char*)input, in_size, (char*)output, max_concurrency);
+#endif
 }
 
 int validate_block_from_blob(const char *blob_hex,

@@ -58,11 +58,22 @@ MONERO_LIBS = \
   ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
   ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a
 
+LIBRX = ${MONERO_BUILD_ROOT}/external/randomx/librandomx.a
+
 DIRS = src data rxi/log/src
 
 OS := $(shell uname -s)
 
 CPPDEFS = _GNU_SOURCE AUTO_INITIALIZE_EASYLOGGINGPP LOG_USE_COLOR
+
+ifeq ($(wildcard ${LIBRX}),${LIBRX})
+  MONERO_LIBS += ${LIBRX}
+  CPPDEFS += HAVE_RX
+else
+  ifneq ($(MAKECMDGOALS),clean)
+    $(warning Building without RandomX!)
+  endif
+endif
 
 W = -W -Wall -Wno-unused-parameter -Wuninitialized
 OPT = -maes -fPIC

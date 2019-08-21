@@ -55,7 +55,10 @@ int get_hashing_blob(const unsigned char *input, const size_t in_size,
 int parse_address(const char *input, uint64_t *prefix,
         unsigned char *pub_spend);
 void get_hash(const unsigned char *input, const size_t in_size,
-        unsigned char **output, int variant, uint64_t height);
+        unsigned char *output, int variant, uint64_t height);
+void get_rx_hash(const unsigned char *input, const size_t in_size,
+        unsigned char *output, const unsigned char *seed_hash,
+        const uint64_t height);
 int validate_block_from_blob(const char *blob_hex,
         const unsigned char *sec_view,
         const unsigned char *pub_spend);

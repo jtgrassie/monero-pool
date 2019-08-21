@@ -150,6 +150,8 @@ typedef struct block_template_t
     uint64_t height;
     char prev_hash[64];
     uint32_t reserved_offset;
+    char seed_hash[64];
+    char next_seed_hash[64];
 } block_template_t;
 
 typedef struct job_t
@@ -245,6 +247,14 @@ static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
 static unsigned char sec_view[32];
 static unsigned char pub_spend[32];
+
+#ifdef HAVE_RX
+extern void rx_stop_mining();
+extern void rx_slow_hash_free_state();
+#else
+void rx_stop_mining(){}
+void rx_slow_hash_free_state(){}
+#endif
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
@@ -567,7 +577,12 @@ balance_add(const char *address, uint64_t amount, MDB_txn *parent)
     {
         log_trace("Adding new balance entry");
         MDB_val new_val = { sizeof(amount), (void*)&amount };
-        mdb_cursor_put(cursor, &key, &new_val, MDB_APPEND);
+        rc = mdb_cursor_put(cursor, &key, &new_val, 0);
+        if (rc != 0)
+        {
+            err = mdb_strerror(rc);
+            log_error("%s", err);
+        }
     }
     else if (rc == 0)
     {
@@ -658,6 +673,8 @@ payout_block(block_t *block, MDB_txn *parent)
         rc = balance_add(share->address, amount, txn);
         if (rc != 0)
         {
+            err = mdb_strerror(rc);
+            log_error("%s", err);
             mdb_cursor_close(cursor);
             mdb_txn_abort(txn);
             return rc;
@@ -857,12 +874,14 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64","
                 "\"reserved_offset\":%u,"
                 "\"client_nonce_offset\":%u,\"client_pool_offset\":%u,"
-                "\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
+                "\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\","
+                "\"seed_hash\":\"%.64s\",\"next_seed_hash\":\"%.64s\"},"
                 "\"status\":\"OK\"}}\n",
                 json_id, client_id, block_hex, job_id,
                 bt->difficulty, bt->height, bt->reserved_offset,
                 bt->reserved_offset + 12,
-                bt->reserved_offset + 8, target, target_hex);
+                bt->reserved_offset + 8, target, target_hex,
+                bt->seed_hash, bt->next_seed_hash);
     }
     else
     {
@@ -873,11 +892,13 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
                 "\"difficulty\":%"PRIu64",\"height\":%"PRIu64","
                 "\"reserved_offset\":%u,"
                 "\"client_nonce_offset\":%u,\"client_pool_offset\":%u,"
-                "\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\"},"
+                "\"target_diff\":%"PRIu64",\"target_diff_hex\":\"%s\","
+                "\"seed_hash\":\"%.64s\",\"next_seed_hash\":\"%.64s\"},"
                 "\"status\":\"OK\"}}\n", client_id, block_hex, job_id,
                 bt->difficulty, bt->height,
                 bt->reserved_offset, bt->reserved_offset + 12,
-                bt->reserved_offset + 8, target, target_hex);
+                bt->reserved_offset + 8, target, target_hex,
+                bt->seed_hash, bt->next_seed_hash);
     }
 }
 
@@ -893,6 +914,14 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
     uint64_t target = job->target;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
+    char empty[] = "";
+    char *seed_hash = empty;
+    char *next_seed_hash = empty;
+    if (job->miner_template)
+    {
+        seed_hash = job->miner_template->seed_hash;
+        next_seed_hash = job->miner_template->next_seed_hash;
+    }
     unsigned char extra_bin[8];
     memcpy(extra_bin, &job->extra_nonce, 4);
     memcpy(extra_bin+4, &instance_id, 4);
@@ -905,10 +934,11 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
                 "\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{"
                 "\"job_id\":\"%.32s\",\"target\":\"%s\","
-                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\"},"
+                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\","
+                "\"seed_hash\":\"%.64s\",\"next_seed_hash\":\"%.64s\"},"
                 "\"status\":\"OK\"}}\n",
                 json_id, client_id, job_id, target_hex, extra_hex,
-                config.pool_wallet);
+                config.pool_wallet, seed_hash, next_seed_hash);
     }
     else
     {
@@ -916,8 +946,10 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
                 "\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"job_id\":\"%.32s\","
                 "\"target\":\"%s\","
-                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\"}}\n",
-                client_id, job_id, target_hex, extra_hex, config.pool_wallet);
+                "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\","
+                "\"seed_hash\":\"%.64s\",\"next_seed_hash\":\"%.64s\"}}\n",
+                client_id, job_id, target_hex, extra_hex, config.pool_wallet,
+                seed_hash, next_seed_hash);
     }
 }
 
@@ -934,6 +966,8 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
     uint64_t height = job->block_template->height;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
+    char *seed_hash = job->block_template->seed_hash;
+    char *next_seed_hash = job->block_template->next_seed_hash;
 
     if (response)
     {
@@ -941,9 +975,11 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
                 "\"error\":null,\"result\""
                 ":{\"id\":\"%.32s\",\"job\":{"
                 "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\","
-                "\"height\":%"PRIu64"},"
+                "\"height\":%"PRIu64",\"seed_hash\":\"%.64s\","
+                "\"next_seed_hash\":\"%.64s\"},"
                 "\"status\":\"OK\"}}\n",
-                json_id, client_id, blob, job_id, target_hex, height);
+                json_id, client_id, blob, job_id, target_hex, height,
+                seed_hash, next_seed_hash);
     }
     else
     {
@@ -951,8 +987,10 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
                 "\"job\",\"params\""
                 ":{\"id\":\"%.32s\",\"blob\":\"%s\",\"job_id\":\"%.32s\","
                 "\"target\":\"%s\","
-                "\"height\":%"PRIu64"}}\n",
-                client_id, blob, job_id, target_hex, height);
+                "\"height\":%"PRIu64",\"seed_hash\":\"%.64s\","
+                "\"next_seed_hash\":\"%.64s\"}}\n",
+                client_id, blob, job_id, target_hex, height,
+                seed_hash, next_seed_hash);
     }
 }
 
@@ -1202,6 +1240,23 @@ response_to_block_template(json_object *result,
     block_template->height = json_object_get_int64(height);
     memcpy(block_template->prev_hash, json_object_get_string(prev_hash), 64);
     block_template->reserved_offset = json_object_get_int(reserved_offset);
+
+    unsigned int major_version = 0;
+    sscanf(block_template->blocktemplate_blob, "%2x", &major_version);
+    uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
+    log_trace("Variant: %u", pow_variant);
+
+    if (pow_variant >= 6)
+    {
+        JSON_GET_OR_WARN(seed_hash, result, json_type_string);
+        JSON_GET_OR_WARN(next_seed_hash, result, json_type_string);
+        assert(seed_hash != NULL);
+        assert(next_seed_hash != NULL);
+        memcpy(block_template->seed_hash,
+                json_object_get_string(seed_hash), 64);
+        memcpy(block_template->next_seed_hash,
+                json_object_get_string(next_seed_hash), 64);
+    }
 }
 
 static void
@@ -2087,6 +2142,23 @@ client_on_block_template(json_object *message, client_t *client)
     memcpy(job->miner_template->prev_hash,
             json_object_get_string(prev_hash), 64);
 
+    unsigned int major_version = 0;
+    sscanf(btb, "%2x", &major_version);
+    uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
+    log_trace("Variant: %u", pow_variant);
+
+    if (pow_variant >= 6)
+    {
+        JSON_GET_OR_WARN(seed_hash, params, json_type_string);
+        JSON_GET_OR_WARN(next_seed_hash, params, json_type_string);
+        assert(seed_hash != NULL);
+        assert(next_seed_hash != NULL);
+        memcpy(job->miner_template->seed_hash,
+                json_object_get_string(seed_hash), 64);
+        memcpy(job->miner_template->next_seed_hash,
+                json_object_get_string(next_seed_hash), 64);
+    }
+
     log_trace("Client set template: %s", btb);
     char body[STATUS_BODY_MAX];
     stratum_get_status_body(body, client->json_id, "OK");
@@ -2256,9 +2328,19 @@ client_on_submit(json_object *message, client_t *client)
     unsigned char result_hash[32] = {0};
     unsigned char submitted_hash[32] = {0};
     uint8_t major_version = (uint8_t)block[0];
-    const int cn_variant = major_version >= 7 ? major_version - 6 : 0;
-    get_hash(hashing_blob, hashing_blob_size,
-            (unsigned char**)&result_hash, cn_variant, bt->height);
+    uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
+    if (pow_variant >= 6)
+    {
+        unsigned char seed_hash[32];
+        hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
+        get_rx_hash(hashing_blob, hashing_blob_size,
+                (unsigned char*)result_hash, seed_hash, bt->height);
+    }
+    else
+    {
+        get_hash(hashing_blob, hashing_blob_size,
+                (unsigned char*)result_hash, pow_variant, bt->height);
+    }
     hex_to_bin(result_hex, 64, submitted_hash, 32);
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)
@@ -2768,6 +2850,8 @@ cleanup(void)
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
+    rx_stop_mining();
+    rx_slow_hash_free_state();
     pthread_mutex_destroy(&mutex_clients);
     log_info("Pool shutdown successfully");
     if (fd_log)
