@@ -1729,9 +1729,9 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
         int ec = json_object_get_int(code);
         const char *em = json_object_get_string(message);
         log_error("Error (%d) with wallet transfer: %s", ec, em);
-        goto cleanup;
     }
-    log_info("Payout transfer successfull");
+    else
+        log_info("Payout transfer successfull");
 
     int rc;
     char *err;
@@ -1772,6 +1772,11 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
         }
         uint64_t current_amount = *(uint64_t*)val.mv_data;
         current_amount -= payment->amount;
+        if (error)
+        {
+            log_warn("Error seen on transfer for %s with amount %"PRIu64,
+                    payment->address, payment->amount);
+        }
         MDB_val new_val = {sizeof(current_amount), (void*)&current_amount};
         rc = mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
         if (rc != 0)
