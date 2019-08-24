@@ -94,6 +94,16 @@ int parse_address(const char *input, uint64_t *prefix,
     return rv ? XMR_NO_ERROR : XMR_PARSE_ERROR;
 }
 
+int get_block_hash(const unsigned char *input, const size_t in_size,
+        unsigned char *output)
+{
+    block b = AUTO_VAL_INIT(b);
+    blobdata bd = std::string((const char*)input, in_size);
+    bool rv = parse_and_validate_block_from_blob(bd, b,
+            reinterpret_cast<hash&>(*output));
+    return rv ? XMR_NO_ERROR : XMR_PARSE_ERROR;
+}
+
 void get_hash(const unsigned char *input, const size_t in_size,
         unsigned char *output, int variant, uint64_t height)
 {

@@ -59,6 +59,9 @@ class block_t(Structure):
                 ('reward', c_longlong),
                 ('timestamp', c_longlong)]
 
+def format_block_hash(block_hash):
+    return '{}...{}'.format(block_hash[:4], block_hash[-4:])
+
 def format_block_status(status):
     s = ["LOCKED", "UNLOCKED", "ORPHANED"]
     return s[status]
@@ -109,10 +112,12 @@ def print_mined(path):
             for key, value in curs:
                 height = c_longlong.from_buffer_copy(key).value
                 b = block_t.from_buffer_copy(value)
+                bh = format_block_hash(b.hash.decode('utf-8'))
                 dt = format_timestamp(b.timestamp)
                 reward = format_amount(b.reward)
                 status  = format_block_status(b.status)
-                print('{}\t{}\t{}\t{}'.format(height, status, reward, dt))
+                print('{}\t{}\t{}\t{}\t{}'.format(height, bh, status,
+                    reward, dt))
     env.close()
 
 def print_shares(path):

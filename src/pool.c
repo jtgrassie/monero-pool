@@ -745,6 +745,8 @@ process_blocks(block_t *blocks, size_t count)
             memcpy(&nb, sb, sizeof(block_t));
             if (memcmp(ib->hash, sb->hash, 64) != 0)
             {
+                log_trace("Orphaning because hashes differ: %.64s, %.64s",
+                        ib->hash, sb->hash);
                 log_debug("Orphaned block at height %"PRIu64, ib->height);
                 nb.status |= BLOCK_ORPHANED;
                 MDB_val new_val = {sizeof(block_t), (void*)&nb};
@@ -2403,7 +2405,10 @@ client_on_submit(json_object *message, client_t *client)
         cb->data = calloc(1, sizeof(block_t));
         block_t* b = (block_t*) cb->data;
         b->height = bt->height;
-        bin_to_hex(submitted_hash, 32, b->hash, 64);
+        unsigned char block_hash[32] = {0};
+        if (get_block_hash(block, bin_size, block_hash) != 0)
+            log_error("Error getting block hash!");
+        bin_to_hex(block_hash, 32, b->hash, 64);
         memcpy(b->prev_hash, bt->prev_hash, 64);
         b->difficulty = bt->difficulty;
         b->status = BLOCK_LOCKED;
