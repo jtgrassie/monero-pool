@@ -118,7 +118,7 @@ void get_rx_hash(const unsigned char *input, const size_t in_size,
 #ifdef HAVE_RX
     static unsigned max_concurrency = tools::get_max_concurrency();
     uint64_t seed_height;
-    if (rx_needhash(height, &seed_height))
+    if (rx_needhash(height, &seed_height, max_concurrency))
     {
         rx_seedhash(seed_height, (const char*)seed_hash, max_concurrency);
     }
