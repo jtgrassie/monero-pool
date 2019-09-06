@@ -136,10 +136,8 @@ int validate_block_from_blob(const char *blob_hex,
     */
     block b = AUTO_VAL_INIT(b);
     blobdata bd;
-    secret_key v;
-    public_key S;
-    memcpy(&unwrap(v), sec_view, 32);
-    memcpy(&S, pub_spend, 32);
+    const secret_key &v = *reinterpret_cast<const secret_key*>(sec_view);
+    const public_key &S = *reinterpret_cast<const public_key*>(pub_spend);
 
     if (!parse_hexstr_to_binbuff(blob_hex, bd))
         return XMR_PARSE_ERROR;
