@@ -116,13 +116,10 @@ void get_rx_hash(const unsigned char *input, const size_t in_size,
         const uint64_t height)
 {
 #ifdef HAVE_RX
-    static unsigned max_concurrency = tools::get_max_concurrency();
-    uint64_t seed_height;
-    if (rx_needhash(height, &seed_height, max_concurrency))
-    {
-        rx_seedhash(seed_height, (const char*)seed_hash, max_concurrency);
-    }
-    rx_slow_hash((const char*)input, in_size, (char*)output, max_concurrency);
+    static unsigned miners = tools::get_max_concurrency();
+    uint64_t seed_height = rx_seedheight(height);
+    rx_slow_hash(height, seed_height, (const char*)seed_hash,
+            (const char*)input, in_size, (char*)output, miners, 0);
 #endif
 }
 
