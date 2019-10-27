@@ -119,6 +119,9 @@
                     else
                         el.innerHTML = stats[e];
                 }
+                var percent = stats["pool_hashrate"] / stats["network_hashrate"] * 100;
+                var el = document.querySelector("#pool_hashrate");
+                el.innerHTML = el.innerHTML + " (" + percent.toFixed(2) + "%)";
             };
 
             f.onsubmit = function(e)
