@@ -109,6 +109,7 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             mh, mb);
     response = MHD_create_response_from_buffer(strlen(json),
             (void*) json, MHD_RESPMEM_MUST_COPY);
+    MHD_add_response_header (response, "Content-Type", "application/json");
     ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
     return ret;
