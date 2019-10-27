@@ -178,7 +178,7 @@ typedef struct client_t
     job_t active_jobs[CLIENT_JOBS_MAX];
     uint64_t hashes;
     time_t connected_since;
-    bool is_proxy;
+    bool is_xnp;
     uint32_t mode;
     uint8_t bad_shares;
 } client_t;
@@ -828,7 +828,7 @@ static void
 retarget(client_t *client, job_t *job)
 {
     double duration = difftime(time(NULL), client->connected_since);
-    uint8_t retarget_time = client->is_proxy ? 5 : 120;
+    uint8_t retarget_time = client->is_xnp ? 5 : 120;
     uint64_t target = fmax((double)client->hashes /
             duration * retarget_time, config.pool_start_diff);
     job->target = target;
@@ -1181,7 +1181,7 @@ client_send_job(client_t *client, bool response)
     retarget(client, job);
 
     char body[JOB_BODY_MAX];
-    if (!client->is_proxy)
+    if (!client->is_xnp)
     {
         stratum_get_job_body(body, client, response);
     }
@@ -2078,15 +2078,15 @@ client_on_login(json_object *message, client_t *client)
         if (user_agent)
         {
             strncpy(client->agent, user_agent, 255);
-            client->is_proxy = strstr(user_agent, "proxy") != NULL
+            client->is_xnp = strstr(user_agent, "xmr-node-proxy") != NULL
                 ? true : false;
         }
     }
 
-    if (client->is_proxy && client->mode == MODE_SELF_SELECT)
+    if (client->is_xnp && client->mode == MODE_SELF_SELECT)
     {
         send_validation_error(client,
-                "login mode self-select and proxy not yet supported");
+                "mode self-select not supported by xmr-node-proxy");
         return;
     }
 
@@ -2094,7 +2094,8 @@ client_on_login(json_object *message, client_t *client)
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id));
     uuid_t cid;
     uuid_generate(cid);
-    bin_to_hex((const unsigned char*)cid, sizeof(uuid_t), client->client_id, 32);
+    bin_to_hex((const unsigned char*)cid, sizeof(uuid_t),
+            client->client_id, 32);
     client_send_job(client, true);
 }
 
@@ -2274,7 +2275,7 @@ client_on_submit(json_object *message, client_t *client)
         memcpy(p, &job->extra_nonce, sizeof(extra_nonce));
         p += 4;
         memcpy(p, &instance_id, sizeof(instance_id));
-        if (client->is_proxy)
+        if (client->is_xnp)
         {
             /*
               A proxy supplies pool_nonce and worker_nonce
