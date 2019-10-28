@@ -36,12 +36,14 @@ ifeq ($(MAKECMDGOALS),release)
   TYPE = release
 endif
 
-MONERO_BUILD_ROOT = \
-  ${MONERO_ROOT}/build/$(shell echo `uname | \
-  sed -e 's|[:/\\ \(\)]|_|g'`/` \
-  git -C ${MONERO_ROOT} branch | \
-  grep '\* ' | cut -f2- -d' '| \
-  sed -e 's|[:/\\ \(\)]|_|g'`)/release
+ifeq ($(origin MONERO_BUILD_ROOT), undefined)
+  MONERO_BUILD_ROOT = \
+    ${MONERO_ROOT}/build/$(shell echo `uname | \
+    sed -e 's|[:/\\ \(\)]|_|g'`/` \
+    git -C ${MONERO_ROOT} branch | \
+    grep '\* ' | cut -f2- -d' '| \
+    sed -e 's|[:/\\ \(\)]|_|g'`)/release
+endif
 
 MONERO_INC = \
   ${MONERO_ROOT}/src \
