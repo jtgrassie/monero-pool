@@ -1141,9 +1141,10 @@ client_send_job(client_t *client, bool response)
     */
 
     /* Convert template to blob */
-    size_t bin_size = strlen(bt->blocktemplate_blob) >> 1;
+    size_t hex_size = strlen(bt->blocktemplate_blob);
+    size_t bin_size = hex_size >> 1;
     unsigned char *block = calloc(bin_size, sizeof(char));
-    hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
+    hex_to_bin(bt->blocktemplate_blob, hex_size, block, bin_size);
 
     /* Set the extra nonce in our reserved space */
     unsigned char *p = block;
@@ -1187,8 +1188,8 @@ client_send_job(client_t *client, bool response)
     }
     else
     {
-        char *block_hex = calloc(bin_size+1, sizeof(char));
-        bin_to_hex(block, bin_size, block_hex, bin_size << 1);
+        char *block_hex = calloc(hex_size+1, sizeof(char));
+        bin_to_hex(block, bin_size, block_hex, hex_size);
         stratum_get_proxy_job_body(body, client, block_hex, response);
         free(block_hex);
     }
