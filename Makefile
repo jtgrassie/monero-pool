@@ -115,6 +115,12 @@ else
 	  boost_serialization boost_program_options
 endif
 
+HID_FOUND := $(shell grep -qo HIDAPI_LIBRARY-NOTFOUND \
+  ${MONERO_BUILD_ROOT}/CMakeCache.txt; echo $$?)
+ifeq ($(HID_FOUND), 1)
+  LIBS += hidapi-libusb
+endif
+
 PKG_LIBS := $(shell pkg-config \
   "libevent >= 2.1" \
   json-c \
