@@ -67,6 +67,7 @@ developers.
 #include "xmr.h"
 #include "log.h"
 #include "webui.h"
+#include "forkoff.h"
 
 #define MAX_LINE 8192
 #define POOL_CLIENTS_GROW 1024
@@ -140,6 +141,8 @@ typedef struct config_t
     bool block_notified;
     bool disable_self_select;
     char data_dir[MAX_PATH];
+    char pid_file[MAX_PATH];
+    bool forked;
 } config_t;
 
 typedef struct block_template_t
@@ -2602,7 +2605,7 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
 
 static void
 read_config(const char *config_file, const char *log_file, bool block_notified,
-        const char *data_dir)
+        const char *data_dir, const char *pid_file, bool forked)
 {
     /* Start with some defaults for any missing... */
     strncpy(config.rpc_host, "127.0.0.1", 10);
@@ -2731,7 +2734,15 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
         }
         else if (strcmp(key, "data-dir") == 0)
         {
-            strncpy(config.data_dir, val,  sizeof(config.data_dir));
+            strncpy(config.data_dir, val, sizeof(config.data_dir));
+        }
+        else if (strcmp(key, "pid-file") == 0)
+        {
+            strncpy(config.pid_file, val, sizeof(config.pid_file));
+        }
+        else if (strcmp(key, "forked") == 0)
+        {
+            config.forked = atoi(val);
         }
     }
     fclose(fp);
@@ -2740,6 +2751,10 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
         strncpy(config.log_file, log_file, sizeof(config.log_file));
     if (data_dir)
         strncpy(config.data_dir, data_dir, sizeof(config.data_dir));
+    if (pid_file)
+        strncpy(config.pid_file, pid_file, sizeof(config.pid_file));
+    if (forked)
+        config.forked = forked;
 
     if (!config.pool_wallet[0])
     {
@@ -2761,14 +2776,14 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
             "log_level = %u\n  webui_port=%u\n  "
             "log-file = %s\n  block-notified = %u\n  "
             "disable-self-select = %u\n  "
-            "data-dir = %s\n",
+            "data-dir = %s\n  pid-file = %s\n  forked = %u\n",
             config.rpc_host, config.rpc_port, config.rpc_timeout,
             config.pool_wallet, config.pool_start_diff, config.share_mul,
             config.pool_fee, config.payment_threshold,
             config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
             config.log_level, config.webui_port,
             config.log_file, config.block_notified, config.disable_self_select,
-            config.data_dir);
+            config.data_dir, config.pid_file, config.forked);
 }
 
 static void
@@ -2880,30 +2895,27 @@ cleanup(void)
 
 int main(int argc, char **argv)
 {
-    setvbuf(stdout, NULL, _IONBF, 0);
-    signal(SIGINT, sigint_handler);
-    atexit(cleanup);
-
-    log_set_level(LOG_INFO);
-    log_info("Starting pool");
-
     static struct option options[] =
     {
         {"config-file", required_argument, 0, 'c'},
         {"log-file", required_argument, 0, 'l'},
         {"block-notified", optional_argument, 0, 'b'},
         {"data-dir", required_argument, 0, 'd'},
+        {"pid-file", required_argument, 0, 'p'},
+        {"forked", optional_argument, 0, 'f'},
         {0, 0, 0, 0}
     };
     char *config_file = NULL;
     char *log_file = NULL;
     bool block_notified = false;
     char *data_dir = NULL;
+    char *pid_file = NULL;
+    bool forked = false;
     int c;
     while (1)
     {
         int option_index = 0;
-        c = getopt_long (argc, argv, "c:l:b:d:",
+        c = getopt_long (argc, argv, "c:l:b::d:p:f::",
                        options, &option_index);
         if (c == -1)
             break;
@@ -2923,9 +2935,22 @@ int main(int argc, char **argv)
             case 'd':
                 data_dir = strdup(optarg);
                 break;
+            case 'p':
+                pid_file = strdup(optarg);
+                break;
+            case 'f':
+                forked = true;
+                if (optarg)
+                    forked = atoi(optarg);
+                break;
         }
     }
-    read_config(config_file, log_file, block_notified, data_dir);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    log_set_level(LOG_INFO);
+    log_info("Starting pool");
+
+    read_config(config_file, log_file, block_notified, data_dir,
+            pid_file, forked);
 
     if (config_file)
         free(config_file);
@@ -2933,6 +2958,8 @@ int main(int argc, char **argv)
         free(log_file);
     if (data_dir)
         free(data_dir);
+    if (pid_file)
+        free(pid_file);
 
     log_set_level(LOG_FATAL - config.log_level);
     if (config.log_file[0])
@@ -2943,6 +2970,18 @@ int main(int argc, char **argv)
         else
             log_set_fp(fd_log);
     }
+
+    if (config.forked)
+    {
+        log_info("Daemonizing");
+        char *pf = NULL;
+        if (config.pid_file[0])
+            pf = config.pid_file;
+        forkoff(pf);
+    }
+
+    signal(SIGINT, sigint_handler);
+    atexit(cleanup);
 
     int err = 0;
     if ((err = database_init(config.data_dir)) != 0)
