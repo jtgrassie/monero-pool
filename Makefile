@@ -52,14 +52,14 @@ MONERO_INC = \
   ${MONERO_ROOT}/contrib/epee/include
 
 MONERO_LIBS = \
-  ${MONERO_BUILD_ROOT}/src/libversion.a \
   ${MONERO_BUILD_ROOT}/src/cryptonote_basic/libcryptonote_basic.a \
   ${MONERO_BUILD_ROOT}/src/crypto/libcncrypto.a \
   ${MONERO_BUILD_ROOT}/src/common/libcommon.a \
   ${MONERO_BUILD_ROOT}/src/ringct/libringct_basic.a \
   ${MONERO_BUILD_ROOT}/src/device/libdevice.a \
   ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
-  ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a
+  ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a \
+  ${MONERO_BUILD_ROOT}/src/libversion.a
 
 LIBRX = ${MONERO_BUILD_ROOT}/external/randomx/librandomx.a
 
