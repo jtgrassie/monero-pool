@@ -3,6 +3,5 @@ Things to work on:
  - Offload payout processing to a separate thread (appears not needed, test
    more)
  - Offload RPC requests to a separate thread (appears not needed, test more)
- - Add daemonizing option (for those too lazy to nohup or use tmux/screen)
 
 [//]: # ( vim: set tw=80: )
