@@ -15,20 +15,16 @@ To address these concerns, I've implemented a new, experimental and optional
 to mine on.
 
 What follows are the instructions to test this new mode and the changes made to
-the stratum messages. For a miner to test against the pool, there is a very
-simple miner, [monero-powpy](https://github.com/jtgrassie/monero-powpy)
-(`stratum-ss-miner.py`), and also a hastily cobbled together branch of
-[XMRig](https://github.com/jtgrassie/xmrig/tree/stratum-ss).
+the stratum messages. For a miner to test against the pool,
+[XMRig](https://github.com/xmrig/xmrig) already has this implemented.
+Alternatively there is a very simple demonstration miner,
+[monero-powpy](https://github.com/jtgrassie/monero-powpy)
+(`stratum-ss-miner.py`).
 
-## Building
-
-The only variation to the standard build instructions in the
-[README](./README.md#compiling-from-source), is that you'll first need to fetch
-and compile the latest Monero ***master*** branch.
 
 ## Running
 
-Start your newly compiled `monerod` and `monero-wallet-rpc`. For example, in one
+Start your `monerod` and `monero-wallet-rpc`. For example, in one
 shell:
 
     cd "$MONERO_ROOT"/build/Linux/master/release/bin
@@ -43,19 +39,18 @@ And in another shell:
 Next, in a third shell, run `monero-pool`. Instructions per the
 [README](./README.md#running).
 
-Lastly you'll need to run a miner that supports this new stratum mode (see
+Lastly you'll need to use a miner that supports this new stratum mode (see
 above):
+
+ - If using [XMRig](https://github.com/xmrig/xmrig), just adjust your pool
+   object in your `config.json` file setting the `self-select` field to your
+   daemon address (e.g. `"self-select": "localhost:28081"`).
 
  - If using [monero-powpy](https://github.com/jtgrassie/monero-powpy), install
    the requirements per the projects
    [README](https://github.com/jtgrassie/monero-powpy/blob/master/README.md),
    then just run the `stratum-ss-miner.py` miner, optionally editing the
    parameters first.
-
- - If using [XMRig](https://github.com/jtgrassie/xmrig/tree/stratum-ss), edit
-   your pool object in your `config.json` file setting the `algo` field to
-   `"algo": "cryptonight/r"` and setting the `self-select` field to your daemon
-   address (e.g. `"self-select": "localhost:28081"`).
 
 ## Specification
 
