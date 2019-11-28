@@ -1252,7 +1252,7 @@ response_to_block_template(json_object *result,
             json_object_get_string(blocktemplate_blob));
     block_template->difficulty = json_object_get_int64(difficulty);
     block_template->height = json_object_get_int64(height);
-    memcpy(block_template->prev_hash, json_object_get_string(prev_hash), 64);
+    strncpy(block_template->prev_hash, json_object_get_string(prev_hash), 64);
     block_template->reserved_offset = json_object_get_int(reserved_offset);
 
     unsigned int major_version = 0;
@@ -1266,9 +1266,9 @@ response_to_block_template(json_object *result,
         JSON_GET_OR_WARN(next_seed_hash, result, json_type_string);
         assert(seed_hash != NULL);
         assert(next_seed_hash != NULL);
-        memcpy(block_template->seed_hash,
+        strncpy(block_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
-        memcpy(block_template->next_seed_hash,
+        strncpy(block_template->next_seed_hash,
                 json_object_get_string(next_seed_hash), 64);
     }
 }
@@ -1286,8 +1286,8 @@ response_to_block(json_object *block_header, block_t *block)
     JSON_GET_OR_WARN(orphan_status, block_header, json_type_boolean);
     block->height = json_object_get_int64(height);
     block->difficulty = json_object_get_int64(difficulty);
-    memcpy(block->hash, json_object_get_string(hash), 64);
-    memcpy(block->prev_hash, json_object_get_string(prev_hash), 64);
+    strncpy(block->hash, json_object_get_string(hash), 64);
+    strncpy(block->prev_hash, json_object_get_string(prev_hash), 64);
     block->timestamp = json_object_get_int64(timestamp);
     block->reward = json_object_get_int64(reward);
     if (json_object_get_int(orphan_status))
@@ -1887,7 +1887,7 @@ send_payments(void)
 
         log_info("Sending payment of %"PRIu64" to %s\n", amount, address);
 
-        memcpy(payment->address, address, ADDRESS_MAX);
+        strncpy(payment->address, address, ADDRESS_MAX);
         payment->amount = amount;
         payments_count++;
 
@@ -2159,7 +2159,7 @@ client_on_block_template(json_object *message, client_t *client)
     job->miner_template->blocktemplate_blob = strdup(btb);
     job->miner_template->difficulty = json_object_get_int64(difficulty);
     job->miner_template->height = json_object_get_int64(height);
-    memcpy(job->miner_template->prev_hash,
+    strncpy(job->miner_template->prev_hash,
             json_object_get_string(prev_hash), 64);
 
     unsigned int major_version = 0;
@@ -2173,9 +2173,9 @@ client_on_block_template(json_object *message, client_t *client)
         JSON_GET_OR_WARN(next_seed_hash, params, json_type_string);
         assert(seed_hash != NULL);
         assert(next_seed_hash != NULL);
-        memcpy(job->miner_template->seed_hash,
+        strncpy(job->miner_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
-        memcpy(job->miner_template->next_seed_hash,
+        strncpy(job->miner_template->next_seed_hash,
                 json_object_get_string(next_seed_hash), 64);
     }
 
@@ -2414,7 +2414,7 @@ client_on_submit(json_object *message, client_t *client)
         if (get_block_hash(block, bin_size, block_hash) != 0)
             log_error("Error getting block hash!");
         bin_to_hex(block_hash, 32, b->hash, 64);
-        memcpy(b->prev_hash, bt->prev_hash, 64);
+        strncpy(b->prev_hash, bt->prev_hash, 64);
         b->difficulty = bt->difficulty;
         b->status = BLOCK_LOCKED;
         b->timestamp = now;
