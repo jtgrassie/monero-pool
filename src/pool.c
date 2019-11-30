@@ -2586,21 +2586,15 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
     if (fd < 0)
     {
         perror("accept");
+        return;
     }
-    else if (fd > FD_SETSIZE)
-    {
-        close(fd);
-    }
-    else
-    {
-        struct bufferevent *bev;
-        evutil_make_socket_nonblocking(fd);
-        bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-        bufferevent_setcb(bev, client_on_read, NULL, client_on_error, NULL);
-        bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
-        bufferevent_enable(bev, EV_READ|EV_WRITE);
-        client_add(fd, bev);
-    }
+    struct bufferevent *bev;
+    evutil_make_socket_nonblocking(fd);
+    bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+    bufferevent_setcb(bev, client_on_read, NULL, client_on_error, NULL);
+    bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
+    client_add(fd, bev);
 }
 
 static void
