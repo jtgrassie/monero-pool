@@ -1209,7 +1209,7 @@ pool_clients_send_job(void)
     client_t *c = pool_clients.clients;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
-        if (c->fd == 0)
+        if (c->fd == 0 || c->address[0] == 0)
             continue;
         client_send_job(c, false);
     }
@@ -2009,6 +2009,11 @@ static void
 client_find(struct bufferevent *bev, client_t **client)
 {
     int fd = bufferevent_getfd(bev);
+    if (fd < 0)
+    {
+        *client = NULL;
+        return;
+    }
     client_t *c = pool_clients.clients;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
@@ -2463,6 +2468,7 @@ client_on_read(struct bufferevent *bev, void *ctx)
     const char *unknown_method = "Removing client. Unknown method called.";
     const char *too_bad = "Removing client. Too many bad shares.";
     const char *too_long = "Removing client. Message too long.";
+    const char *invalid_json = "Removing client. Invalid JSON.";
     struct evbuffer *input, *output;
     char *line;
     size_t n;
@@ -2501,6 +2507,17 @@ client_on_read(struct bufferevent *bev, void *ctx)
     while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF)))
     {
         json_object *message = json_tokener_parse(line);
+        if (!message)
+        {
+            free(line);
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, invalid_json);
+            evbuffer_add(output, body, strlen(body));
+            log_info(invalid_json);
+            evbuffer_drain(input, len);
+            client_clear(bev);
+            return;
+        }
         JSON_GET_OR_WARN(method, message, json_type_string);
         JSON_GET_OR_WARN(id, message, json_type_int);
         const char *method_name = json_object_get_string(method);
@@ -2593,8 +2610,8 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
     bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     bufferevent_setcb(bev, client_on_read, NULL, client_on_error, NULL);
     bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
-    bufferevent_enable(bev, EV_READ|EV_WRITE);
     client_add(fd, bev);
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
 
 static void
