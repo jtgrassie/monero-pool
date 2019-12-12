@@ -164,6 +164,7 @@ typedef struct config_t
     char upstream_host[MAX_HOST];
     uint16_t upstream_port;
     char pool_view_key[64];
+    char pool_fee_wallet[ADDRESS_MAX];
 } config_t;
 
 typedef struct block_template_t
@@ -797,6 +798,16 @@ payout_block(block_t *block, MDB_txn *parent)
         total_paid += amount;
         uint64_t fee = amount * config.pool_fee;
         amount -= fee;
+        if (fee > 0 && config.pool_fee_wallet[0])
+        {
+            rc = balance_add(config.pool_fee_wallet, fee, txn);
+            if (rc != 0)
+            {
+            err = mdb_strerror(rc);
+            log_error("Pool Fee balance_add : %s", err);
+            }
+        }
+        
         if (amount == 0)
             continue;
         rc = balance_add(share->address, amount, txn);
@@ -3667,6 +3678,10 @@ read_config(const char *config_file)
         {
             memcpy(config.pool_view_key, val, 64);
         }
+        else if (strcmp(key, "pool-fee-wallet") == 0)
+        {
+            strncpy(config.pool_fee_wallet, val, sizeof(config.pool_fee_wallet)-1);
+        }
     }
     fclose(fp);
 
@@ -3679,6 +3694,13 @@ read_config(const char *config_file)
     {
         log_fatal("Invalid pool wallet");
         exit(-1);
+    }
+
+    if (config.pool_fee_wallet[0])
+    {
+        /**
+         * TODO: Check if valid addr for nettype
+         **/
     }
     if (!config.wallet_rpc_host[0] || config.wallet_rpc_port == 0)
     {
@@ -3740,6 +3762,7 @@ static void print_config()
         "  pool-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
         "  pool-fee = %.3f\n"
+        "  pool-fee-wallet = %s\n"
         "  payment-threshold = %.2f\n"
         "  share-mul = %.2f\n"
         "  retarget-time = %u\n"
@@ -3768,6 +3791,7 @@ static void print_config()
         config.pool_wallet,
         config.pool_start_diff,
         config.pool_fee,
+        config.pool_fee_wallet,
         config.payment_threshold,
         config.share_mul,
         config.retarget_time,
