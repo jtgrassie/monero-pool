@@ -2395,7 +2395,7 @@ client_on_submit(json_object *message, client_t *client)
     client->hashes += job->target;
     time_t now = time(NULL);
     bool can_store = true;
-    log_trace("Checking hash against blobk difficulty: "
+    log_trace("Checking hash against block difficulty: "
             "%lu, job difficulty: %lu",
             BN_get_word(bd), BN_get_word(jd));
 
