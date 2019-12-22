@@ -1865,7 +1865,6 @@ send_payments(void)
     size_t payments_max_count = 25;
     size_t payments_size = payments_max_count * sizeof(payment_t);
     payment_t *payments = (payment_t*) calloc(1, payments_size);
-    memset(payments, 0, payments_size);
     payment_t *payment = payments;
     payment_t *end_payment = payment + payments_max_count;
 
@@ -1995,10 +1994,12 @@ client_add(int fd, struct bufferevent *bev)
                 pool_clients.count);
         pool_clients.clients = c;
         c += pool_clients.count - POOL_CLIENTS_GROW;
+        memset(c, 0, sizeof(client_t) * POOL_CLIENTS_GROW);
         pthread_mutex_unlock(&mutex_clients);
         log_debug("Client pool can now hold %zu clients", pool_clients.count);
     }
-    memset(c, 0, sizeof(client_t));
+    else
+        memset(c, 0, sizeof(client_t));
     c->fd = fd;
     c->bev = bev;
     c->connected_since = time(NULL);
