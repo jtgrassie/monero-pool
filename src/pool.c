@@ -2616,8 +2616,7 @@ client_on_accept(evutil_socket_t listener, short event, void *arg)
 }
 
 static void
-read_config(const char *config_file, const char *log_file, bool block_notified,
-        const char *data_dir, const char *pid_file, bool forked)
+read_config(const char *config_file)
 {
     /* Start with some defaults for any missing... */
     strncpy(config.rpc_host, "127.0.0.1", 10);
@@ -2630,7 +2629,6 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
     config.pool_port = 4242;
     config.log_level = 5;
     config.webui_port = 4243;
-    config.block_notified = block_notified;
     config.disable_self_select = false;
     strncpy(config.data_dir, "./data", 7);
 
@@ -2644,7 +2642,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
         if (!getcwd(path, MAX_PATH))
         {
             log_fatal("Cannot getcwd (%s). Aborting.", errno);
-            abort();
+            exit(-1);
         }
         strcat(path, "/pool.conf");
         if (access(path, R_OK) != 0)
@@ -2655,7 +2653,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
             {
                 log_fatal("Cannot find a config file in ./ or ~/ "
                         "and no option supplied. Aborting.");
-                abort();
+                exit(-1);
             }
         }
     }
@@ -2665,7 +2663,7 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
     if (!fp)
     {
         log_fatal("Cannot open config file. Aborting.");
-        abort();
+        exit(-1);
     }
     char line[256];
     char *key;
@@ -2759,27 +2757,21 @@ read_config(const char *config_file, const char *log_file, bool block_notified,
     }
     fclose(fp);
 
-    if (log_file)
-        strncpy(config.log_file, log_file, sizeof(config.log_file));
-    if (data_dir)
-        strncpy(config.data_dir, data_dir, sizeof(config.data_dir));
-    if (pid_file)
-        strncpy(config.pid_file, pid_file, sizeof(config.pid_file));
-    if (forked)
-        config.forked = forked;
-
     if (!config.pool_wallet[0])
     {
         log_fatal("No pool wallet supplied. Aborting.");
-        abort();
+        exit(-1);
     }
     if (!config.wallet_rpc_host[0] || config.wallet_rpc_port == 0)
     {
         log_fatal("Both wallet-rpc-host and wallet-rpc-port need setting. "
                 "Aborting.");
-        abort();
+        exit(-1);
     }
 
+}
+static void print_config()
+{
     log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  "
             "rpc_timeout = %u\n  pool_wallet = %s\n  "
             "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  "
@@ -2959,19 +2951,31 @@ int main(int argc, char **argv)
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     log_set_level(LOG_INFO);
-    log_info("Starting pool");
 
-    read_config(config_file, log_file, block_notified, data_dir,
-            pid_file, forked);
-
+    read_config(config_file);
     if (config_file)
         free(config_file);
+
+    /* Any supplied command line options take precedent... */
     if (log_file)
+    {
+        strncpy(config.log_file, log_file, sizeof(config.log_file));
         free(log_file);
+    }
     if (data_dir)
+    {
+        strncpy(config.data_dir, data_dir, sizeof(config.data_dir));
         free(data_dir);
+    }
     if (pid_file)
+    {
+        strncpy(config.pid_file, pid_file, sizeof(config.pid_file));
         free(pid_file);
+    }
+    if (forked)
+        config.forked = forked;
+    if (block_notified)
+        config.block_notified = block_notified;
 
     log_set_level(LOG_FATAL - config.log_level);
     if (config.log_file[0])
@@ -2982,6 +2986,9 @@ int main(int argc, char **argv)
         else
             log_set_fp(fd_log);
     }
+
+    print_config();
+    log_info("Starting pool");
 
     if (config.forked)
     {
