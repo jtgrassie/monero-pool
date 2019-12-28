@@ -363,40 +363,40 @@ database_init(const char* data_dir)
     if ((rc = mdb_env_open(env, data_dir, 0, 0664)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s (%s)", err, data_dir);
         exit(rc);
     }
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s", err);
         exit(rc);
     }
     uint32_t flags = MDB_INTEGERKEY | MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED;
     if ((rc = mdb_dbi_open(txn, "shares", flags, &db_shares)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s", err);
         exit(rc);
     }
     if ((rc = mdb_dbi_open(txn, "blocks", flags, &db_blocks)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s", err);
         exit(rc);
     }
     flags = MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED;
     if ((rc = mdb_dbi_open(txn, "payments", flags, &db_payments)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s", err);
         exit(rc);
     }
     flags = MDB_CREATE;
     if ((rc = mdb_dbi_open(txn, "balance", flags, &db_balance)) != 0)
     {
         err = mdb_strerror(rc);
-        log_fatal("%s\n", err);
+        log_fatal("%s", err);
         exit(rc);
     }
 
@@ -1229,7 +1229,8 @@ pool_clients_init(void)
 static void
 pool_clients_free(void)
 {
-    assert(pool_clients.count != 0);
+    if (!pool_clients.clients)
+        return;
     client_t *c = pool_clients.clients;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
@@ -2874,7 +2875,7 @@ run(void)
 static void
 cleanup(void)
 {
-    log_info("\nPerforming cleanup");
+    log_info("Performing cleanup");
     if (listener_event)
         event_free(listener_event);
     stop_web_ui();
@@ -2884,10 +2885,13 @@ cleanup(void)
         event_free(timer_120s);
     if (timer_10m)
         event_free(timer_10m);
-    event_base_free(base);
+    if (base)
+        event_base_free(base);
     pool_clients_free();
-    bstack_free(bsh);
-    bstack_free(bst);
+    if (bsh)
+        bstack_free(bsh);
+    if (bst)
+        bstack_free(bst);
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
