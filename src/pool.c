@@ -830,10 +830,13 @@ template_recycle(void *item)
 static void
 retarget(client_t *client, job_t *job)
 {
+    uint64_t bd = 0xFFFFFFFFFFFFFFFF;
+    if (job->block_template)
+        bd = job->block_template->difficulty;
     double duration = difftime(time(NULL), client->connected_since);
     uint8_t retarget_time = client->is_xnp ? 5 : 120;
-    uint64_t target = fmax((double)client->hashes /
-            duration * retarget_time, config.pool_start_diff);
+    uint64_t target = fmin(fmax((double)client->hashes /
+            duration * retarget_time, config.pool_start_diff), bd);
     job->target = target;
     log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
 }
@@ -1114,6 +1117,9 @@ client_send_job(client_t *client, bool response)
     job_t *job = &client->active_jobs[0];
     memset(job, 0, sizeof(job_t));
 
+    block_template_t *bt = bstack_peek(bst);
+    job->block_template = bt;
+
     if (client->mode == MODE_SELF_SELECT)
     {
         uuid_generate(job->id);
@@ -1129,7 +1135,6 @@ client_send_job(client_t *client, bool response)
     }
 
     /* Quick check we actually have a block template */
-    block_template_t *bt = bstack_peek(bst);
     if (!bt)
     {
         log_warn("Cannot send client a job: No block template");
@@ -1173,9 +1178,6 @@ client_send_job(client_t *client, bool response)
 
     /* Save a job id */
     uuid_generate(job->id);
-
-    /* Hold reference to block template */
-    job->block_template = bt;
 
     /* Send */
     char job_id[33] = {0};
