@@ -779,7 +779,7 @@ process_blocks(block_t *blocks, size_t count)
             rc = payout_block(&nb, txn);
             if (rc == 0)
             {
-                log_debug("Paided out block %"PRIu64, nb.height);
+                log_debug("Paid out block %"PRIu64, nb.height);
                 MDB_val new_val = {sizeof(block_t), (void*)&nb};
                 mdb_cursor_put(cursor, &key, &new_val, MDB_CURRENT);
             }
@@ -1165,7 +1165,7 @@ client_send_job(client_t *client, bool response)
     p += 4;
     memcpy(p, &instance_id, sizeof(instance_id));
 
-    /* Get hashong blob */
+    /* Get hashing blob */
     size_t hashing_blob_size;
     unsigned char *hashing_blob = NULL;
     get_hashing_blob(block, bin_size, &hashing_blob, &hashing_blob_size);
@@ -1739,7 +1739,7 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
         log_error("Error (%d) with wallet transfer: %s", ec, em);
     }
     else
-        log_info("Payout transfer successfull");
+        log_info("Payout transfer successful");
 
     int rc;
     char *err;
@@ -2263,7 +2263,7 @@ client_on_submit(json_object *message, client_t *client)
     /* Convert template to blob */
     if (client->mode == MODE_SELF_SELECT && !job->miner_template)
     {
-        send_validation_error(client, "mode self-selct and no template");
+        send_validation_error(client, "mode self-select and no template");
         return;
     }
     block_template_t *bt;
@@ -2291,7 +2291,7 @@ client_on_submit(json_object *message, client_t *client)
         {
             /*
               A proxy supplies pool_nonce and worker_nonce
-              so add them in the resrved space too.
+              so add them in the reserved space too.
             */
             JSON_GET_OR_WARN(poolNonce, params, json_type_int);
             JSON_GET_OR_WARN(workerNonce, params, json_type_int);
@@ -2338,7 +2338,7 @@ client_on_submit(json_object *message, client_t *client)
     p += 39;
     memcpy(p, &result_nonce, sizeof(result_nonce));
 
-    /* Get hashong blob */
+    /* Get hashing blob */
     size_t hashing_blob_size;
     unsigned char *hashing_blob = NULL;
     if (get_hashing_blob(block, bin_size,
