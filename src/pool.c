@@ -132,6 +132,7 @@ typedef struct config_t
     char pool_wallet[ADDRESS_MAX];
     uint64_t pool_start_diff;
     double share_mul;
+    uint32_t retarget_time;
     double pool_fee;
     double payment_threshold;
     uint32_t pool_port;
@@ -834,7 +835,7 @@ retarget(client_t *client, job_t *job)
     if (job->block_template)
         bd = job->block_template->difficulty;
     double duration = difftime(time(NULL), client->connected_since);
-    uint8_t retarget_time = client->is_xnp ? 5 : 120;
+    uint8_t retarget_time = client->is_xnp ? 5 : config.retarget_time;
     uint64_t target = fmin(fmax((double)client->hashes /
             duration * retarget_time, config.pool_start_diff), bd);
     job->target = target;
@@ -2627,11 +2628,13 @@ read_config(const char *config_file)
     config.rpc_timeout = 15;
     config.pool_start_diff = 100;
     config.share_mul = 2.0;
+    config.retarget_time = 120;
     config.pool_fee = 0.01;
     config.payment_threshold = 0.33;
     config.pool_port = 4242;
     config.log_level = 5;
     config.webui_port = 4243;
+    config.block_notified = false;
     config.disable_self_select = false;
     strncpy(config.data_dir, "./data", 7);
 
@@ -2681,17 +2684,21 @@ read_config(const char *config_file)
         if (!val)
             continue;
         val[strcspn(val, "\r\n")] = 0;
-        if (strcmp(key, "rpc-host") == 0)
+        if (strcmp(key, "pool-port") == 0)
+        {
+            config.pool_port = atoi(val);
+        }
+        else if (strcmp(key, "webui-port") == 0)
+        {
+            config.webui_port = atoi(val);
+        }
+        else if (strcmp(key, "rpc-host") == 0)
         {
             strncpy(config.rpc_host, val, sizeof(config.rpc_host));
         }
         else if (strcmp(key, "rpc-port") == 0)
         {
             config.rpc_port = atoi(val);
-        }
-        else if (strcmp(key, "rpc-timeout") == 0)
-        {
-            config.rpc_timeout = atoi(val);
         }
         else if (strcmp(key, "wallet-rpc-host") == 0)
         {
@@ -2701,6 +2708,10 @@ read_config(const char *config_file)
         {
             config.wallet_rpc_port = atoi(val);
         }
+        else if (strcmp(key, "rpc-timeout") == 0)
+        {
+            config.rpc_timeout = atoi(val);
+        }
         else if (strcmp(key, "pool-wallet") == 0)
         {
             strncpy(config.pool_wallet, val, sizeof(config.pool_wallet));
@@ -2708,10 +2719,6 @@ read_config(const char *config_file)
         else if (strcmp(key, "pool-start-diff") == 0)
         {
             config.pool_start_diff = strtoumax(val, NULL, 10);
-        }
-        else if (strcmp(key, "share-mul") == 0)
-        {
-            config.share_mul = atof(val);
         }
         else if (strcmp(key, "pool-fee") == 0)
         {
@@ -2721,17 +2728,17 @@ read_config(const char *config_file)
         {
             config.payment_threshold = atof(val);
         }
-        else if (strcmp(key, "pool-port") == 0)
+        else if (strcmp(key, "share-mul") == 0)
         {
-            config.pool_port = atoi(val);
+            config.share_mul = atof(val);
+        }
+        else if (strcmp(key, "retarget-time") == 0)
+        {
+            config.retarget_time = atoi(val);
         }
         else if (strcmp(key, "log-level") == 0)
         {
             config.log_level = atoi(val);
-        }
-        else if (strcmp(key, "webui-port") == 0)
-        {
-            config.webui_port = atoi(val);
         }
         else if (strcmp(key, "log-file") == 0)
         {
@@ -2775,22 +2782,47 @@ read_config(const char *config_file)
 }
 static void print_config()
 {
-    log_info("\nCONFIG:\n  rpc_host = %s\n  rpc_port = %u\n  "
-            "rpc_timeout = %u\n  pool_wallet = %s\n  "
-            "pool_start_diff = %"PRIu64"\n  share_mul = %.2f\n  "
-            "pool_fee = %.3f\n  payment_threshold = %.2f\n  "
-            "wallet_rpc_host = %s\n  wallet_rpc_port = %u\n  pool_port = %u\n  "
-            "log_level = %u\n  webui_port=%u\n  "
-            "log-file = %s\n  block-notified = %u\n  "
-            "disable-self-select = %u\n  "
-            "data-dir = %s\n  pid-file = %s\n  forked = %u\n",
-            config.rpc_host, config.rpc_port, config.rpc_timeout,
-            config.pool_wallet, config.pool_start_diff, config.share_mul,
-            config.pool_fee, config.payment_threshold,
-            config.wallet_rpc_host, config.wallet_rpc_port, config.pool_port,
-            config.log_level, config.webui_port,
-            config.log_file, config.block_notified, config.disable_self_select,
-            config.data_dir, config.pid_file, config.forked);
+    log_info("\nCONFIG:\n"
+        "  pool-port = %u\n"
+        "  webui-port=%u\n"
+        "  rpc-host = %s\n"
+        "  rpc-port = %u\n"
+        "  wallet-rpc-host = %s\n"
+        "  wallet-rpc-port = %u\n"
+        "  rpc-timeout = %u\n"
+        "  pool-wallet = %s\n"
+        "  pool-start-diff = %"PRIu64"\n"
+        "  pool-fee = %.3f\n"
+        "  payment-threshold = %.2f\n"
+        "  share-mul = %.2f\n"
+        "  retarget-time = %u\n"
+        "  log-level = %u\n"
+        "  log-file = %s\n"
+        "  block-notified = %u\n"
+        "  disable-self-select = %u\n"
+        "  data-dir = %s\n"
+        "  pid-file = %s\n"
+        "  forked = %u\n",
+        config.pool_port,
+        config.webui_port,
+        config.rpc_host,
+        config.rpc_port,
+        config.wallet_rpc_host,
+        config.wallet_rpc_port,
+        config.rpc_timeout,
+        config.pool_wallet,
+        config.pool_start_diff,
+        config.pool_fee,
+        config.payment_threshold,
+        config.share_mul,
+        config.retarget_time,
+        config.log_level,
+        config.log_file,
+        config.block_notified,
+        config.disable_self_select,
+        config.data_dir,
+        config.pid_file,
+        config.forked);
 }
 
 static void

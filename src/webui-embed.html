@@ -90,10 +90,10 @@
                     return parseInt(hr) + " H/s";
                 else if (hr < 1000000)
                     return parseFloat(hr/1000).toFixed(2) + " KH/s";
-                else if (hr < 1000000000000)
+                else if (hr < 1000000000)
                     return parseFloat(hr/1000000).toFixed(2) + " MH/s";
                 else
-                    return parseFloat(hr/1000000000000).toFixed(2) + " GH/s";
+                    return parseFloat(hr/1000000000).toFixed(2) + " GH/s";
             }
 
             var f = document.querySelector("form");
