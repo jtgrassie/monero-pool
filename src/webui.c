@@ -135,7 +135,14 @@ int
 start_web_ui(wui_context_t *context)
 {
     log_debug("Starting Web UI");
-    mhd_daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY,
+    int use_epoll = MHD_is_feature_supported(MHD_FEATURE_EPOLL) == MHD_YES;
+    log_debug("MHD will use epoll: %u", use_epoll);
+
+    unsigned flags = MHD_USE_SELECT_INTERNALLY;
+    if (use_epoll)
+        flags = MHD_USE_EPOLL_INTERNALLY_LINUX_ONLY;
+
+    mhd_daemon = MHD_start_daemon(flags,
             context->port, NULL, NULL,
             &answer_to_connection, (void*) context, MHD_OPTION_END);
     return mhd_daemon != NULL ? 0 : -1;
