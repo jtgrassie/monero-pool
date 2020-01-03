@@ -323,8 +323,7 @@ compare_block(const MDB_val *a, const MDB_val *b)
     const block_t *vb = (const block_t*) b->mv_data;
     int sc = memcmp(va->hash, vb->hash, 64);
     if (sc == 0)
-        return (va->timestamp < vb->timestamp) ? -1 :
-            va->timestamp > vb->timestamp;
+        return (va->timestamp < vb->timestamp) ? -1 : 1;
     else
         return sc;
 }
@@ -336,8 +335,7 @@ compare_share(const MDB_val *a, const MDB_val *b)
     const share_t *vb = (const share_t*) b->mv_data;
     int sc = strcmp(va->address, vb->address);
     if (sc == 0)
-        return (va->timestamp < vb->timestamp) ? -1 :
-            va->timestamp > vb->timestamp;
+        return (va->timestamp < vb->timestamp) ? -1 : 1;
     else
         return sc;
 }
@@ -347,8 +345,7 @@ compare_payment(const MDB_val *a, const MDB_val *b)
 {
     const payment_t *va = (const payment_t*) a->mv_data;
     const payment_t *vb = (const payment_t*) b->mv_data;
-    return (va->timestamp < vb->timestamp) ? -1 :
-        va->timestamp > vb->timestamp;
+    return (va->timestamp < vb->timestamp) ? -1 : 1;
 }
 
 static int
@@ -450,7 +447,14 @@ store_share(uint64_t height, share_t *share)
 
     MDB_val key = { sizeof(height), (void*)&height };
     MDB_val val = { sizeof(share_t), (void*)share };
-    mdb_cursor_put(cursor, &key, &val, MDB_APPENDDUP);
+    rc = mdb_cursor_put(cursor, &key, &val, MDB_APPENDDUP);
+    if (rc != 0)
+    {
+        err = mdb_strerror(rc);
+        log_error("%s", err);
+        mdb_txn_abort(txn);
+        return rc;
+    }
 
     rc = mdb_txn_commit(txn);
     return rc;
@@ -479,7 +483,14 @@ store_block(uint64_t height, block_t *block)
 
     MDB_val key = { sizeof(height), (void*)&height };
     MDB_val val = { sizeof(block_t), (void*)block };
-    mdb_cursor_put(cursor, &key, &val, MDB_APPENDDUP);
+    rc = mdb_cursor_put(cursor, &key, &val, MDB_APPENDDUP);
+    if (rc != 0)
+    {
+        err = mdb_strerror(rc);
+        log_error("%s", err);
+        mdb_txn_abort(txn);
+        return rc;
+    }
 
     rc = mdb_txn_commit(txn);
     return rc;

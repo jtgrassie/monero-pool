@@ -126,12 +126,13 @@ def print_shares(path):
     with env.begin(db=shares) as txn:
         with txn.cursor() as curs:
             curs.last()
-            for i in range(10):
+            for i in range(25):
                 key, value = curs.item()
                 height = c_longlong.from_buffer_copy(key).value
                 share = share_t.from_buffer_copy(value)
                 address = format_address(address_from_key(share.address))
-                print('{}\t{}'.format(height, address))
+                dt = format_timestamp(share.timestamp)
+                print('{}\t{}\t{}'.format(height, address, dt))
                 if not curs.prev():
                     break
     env.close()
