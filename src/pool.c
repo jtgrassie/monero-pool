@@ -40,6 +40,7 @@ developers.
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/http.h>
+#include <event2/thread.h>
 
 #include <lmdb.h>
 
@@ -2948,6 +2949,8 @@ cleanup(void)
 
 int main(int argc, char **argv)
 {
+    int evthread_use_pthreads(void);
+
     static struct option options[] =
     {
         {"config-file", required_argument, 0, 'c'},

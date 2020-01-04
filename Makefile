@@ -103,7 +103,7 @@ endif
 
 LDPARAM += $(LDFLAGS)
 
-LIBS := lmdb pthread microhttpd unbound
+LIBS := lmdb pthread unbound
 ifeq ($(OS), Darwin)
   LIBS += c++ \
 	  boost_system-mt boost_date_time-mt boost_chrono-mt \
@@ -123,7 +123,9 @@ ifeq ($(HID_FOUND), 1)
 endif
 
 PKG_LIBS := $(shell pkg-config \
-  "libevent >= 2.1" \
+  "libevent_core >= 2.1" \
+  "libevent_pthreads >= 2.1" \
+  "libevent_extra >= 2.1" \
   json-c \
   openssl \
   libsodium \
@@ -135,7 +137,9 @@ DLIBS =
 INCPATH := $(DIRS) ${MONERO_INC} /opt/local/include /usr/local/include
 
 PKG_INC := $(shell pkg-config \
-  "libevent >= 2.1" \
+  "libevent_core >= 2.1" \
+  "libevent_pthreads >= 2.1" \
+  "libevent_extra >= 2.1" \
   json-c \
   openssl \
   libsodium \
