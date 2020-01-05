@@ -78,13 +78,16 @@ send_json_stats(struct evhttp_request *req, void *arg)
 
     hdrs_in = evhttp_request_get_input_headers(req);
     const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
-    char *wa = strstr(cookies, "wa=");
-    if (wa)
+    if (cookies)
     {
-        wa += 3;
-        mh = miner_hr(wa);
-        uint64_t balance = miner_balance(wa);
-        mb = (double) balance / 1000000000000.0;
+        char *wa = strstr(cookies, "wa=");
+        if (wa)
+        {
+            wa += 3;
+            mh = miner_hr(wa);
+            uint64_t balance = miner_balance(wa);
+            mb = (double) balance / 1000000000000.0;
+        }
     }
 
     evbuffer_add_printf(buf, "{"
