@@ -100,13 +100,15 @@ send_json_stats(struct evhttp_request *req, void *arg)
             "\"payment_threshold\":%.2f,"
             "\"pool_fee\":%.3f,"
             "\"pool_port\":%d,"
+            "\"pool_ssl_port\":%d,"
             "\"allow_self_select\":%u,"
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
             "\"miner_balance\":%.8f"
             "}", ph, nh, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
-            context->pool_port, ss, context->pool_stats->connected_miners,
+            context->pool_port, context->pool_ssl_port,
+            ss, context->pool_stats->connected_miners,
             mh, mb);
     hdrs_out = evhttp_request_get_output_headers(req);
     evhttp_add_header(hdrs_out, "Content-Type", "application/json");

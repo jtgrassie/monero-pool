@@ -137,6 +137,7 @@ typedef struct config_t
     double pool_fee;
     double payment_threshold;
     uint32_t pool_port;
+    uint32_t pool_ssl_port;
     uint32_t log_level;
     uint32_t webui_port;
     char log_file[MAX_PATH];
@@ -2644,6 +2645,7 @@ read_config(const char *config_file)
     config.pool_fee = 0.01;
     config.payment_threshold = 0.33;
     config.pool_port = 4242;
+    config.pool_ssl_port = 0;
     config.log_level = 5;
     config.webui_port = 4243;
     config.block_notified = false;
@@ -2699,6 +2701,10 @@ read_config(const char *config_file)
         if (strcmp(key, "pool-port") == 0)
         {
             config.pool_port = atoi(val);
+        }
+        else if (strcmp(key, "pool-ssl-port") == 0)
+        {
+            config.pool_ssl_port = atoi(val);
         }
         else if (strcmp(key, "webui-port") == 0)
         {
@@ -2796,6 +2802,7 @@ static void print_config()
 {
     log_info("\nCONFIG:\n"
         "  pool-port = %u\n"
+        "  pool-ssl-port = %u\n"
         "  webui-port=%u\n"
         "  rpc-host = %s\n"
         "  rpc-port = %u\n"
@@ -2816,6 +2823,7 @@ static void print_config()
         "  pid-file = %s\n"
         "  forked = %u\n",
         config.pool_port,
+        config.pool_ssl_port,
         config.webui_port,
         config.rpc_host,
         config.rpc_port,
@@ -3081,6 +3089,7 @@ int main(int argc, char **argv)
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
     uic.pool_port = config.pool_port;
+    uic.pool_ssl_port = config.pool_ssl_port;
     uic.allow_self_select = !config.disable_self_select;
     uic.payment_threshold = config.payment_threshold;
     start_web_ui(&uic);
