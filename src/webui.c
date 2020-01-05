@@ -35,41 +35,37 @@ developers.
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
-#include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
 
-#include <sys/types.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <microhttpd.h>
 #include <pthread.h>
 
-#include <lmdb.h>
+#include <event2/event.h>
+#include <event2/buffer.h>
+#include <event2/http.h>
 
 #include "log.h"
 #include "pool.h"
 #include "webui.h"
 
-#define TAG_MAX 17
-#define PAGE_MAX 8192
-#define JSON_MAX 512
-
 extern unsigned char webui_html[];
 extern unsigned int webui_html_len;
 
-static struct MHD_Daemon *mhd_daemon;
+static pthread_t handle;
+static struct event_base *webui_base;
+static struct evhttp *webui_httpd;
+static struct evhttp_bound_socket *webui_listener;
 
-int
-send_json_stats (void *cls, struct MHD_Connection *connection)
+
+static void
+send_json_stats(struct evhttp_request *req, void *arg)
 {
-    struct MHD_Response *response;
-    int ret;
-    wui_context_t *context = (wui_context_t*) cls;
-    char json[JSON_MAX];
+    struct evbuffer *buf = evhttp_request_get_output_buffer(req);
+    wui_context_t *context = (wui_context_t*) arg;
+    struct evkeyvalq *hdrs_in = NULL;
+    struct evkeyvalq *hdrs_out = NULL;
     uint64_t ph = context->pool_stats->pool_hashrate;
     uint64_t nh = context->pool_stats->network_hashrate;
     uint64_t height = context->pool_stats->network_height;
@@ -79,15 +75,19 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
     unsigned ss = context->allow_self_select;
     uint64_t mh = 0;
     double mb = 0.0;
-    const char *wa = MHD_lookup_connection_value(connection,
-            MHD_COOKIE_KIND, "wa");
-    if (wa != NULL)
+
+    hdrs_in = evhttp_request_get_input_headers(req);
+    const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
+    char *wa = strstr(cookies, "wa=");
+    if (wa)
     {
+        wa += 3;
         mh = miner_hr(wa);
         uint64_t balance = miner_balance(wa);
         mb = (double) balance / 1000000000000.0;
     }
-    snprintf(json, JSON_MAX, "{"
+
+    evbuffer_add_printf(buf, "{"
             "\"pool_hashrate\":%"PRIu64","
             "\"network_hashrate\":%"PRIu64","
             "\"network_height\":%"PRIu64","
@@ -105,54 +105,84 @@ send_json_stats (void *cls, struct MHD_Connection *connection)
             context->payment_threshold, context->pool_fee,
             context->pool_port, ss, context->pool_stats->connected_miners,
             mh, mb);
-    response = MHD_create_response_from_buffer(strlen(json),
-            (void*) json, MHD_RESPMEM_MUST_COPY);
-    MHD_add_response_header (response, "Content-Type", "application/json");
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-    MHD_destroy_response(response);
-    return ret;
+    hdrs_out = evhttp_request_get_output_headers(req);
+    evhttp_add_header(hdrs_out, "Content-Type", "application/json");
+    evhttp_send_reply(req, HTTP_OK, "OK", buf);
 }
 
-int
-answer_to_connection (void *cls, struct MHD_Connection *connection,
-        const char *url,
-        const char *method, const char *version,
-        const char *upload_data,
-        size_t *upload_data_size, void **con_cls)
+static void
+process_request(struct evhttp_request *req, void *arg)
 {
-    if (strstr(url, "/stats") != NULL)
-        return send_json_stats(cls, connection);
+    const char *url = evhttp_request_get_uri(req);
+    struct evbuffer *buf = NULL;
+    struct evkeyvalq *hdrs_out = NULL;
 
-    struct MHD_Response *response;
-    response = MHD_create_response_from_buffer(webui_html_len,
-            (void*) webui_html, MHD_RESPMEM_PERSISTENT);
-    int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-    MHD_destroy_response(response);
-    return ret;
+    if (strstr(url, "/stats") != NULL)
+    {
+        send_json_stats(req, arg);
+        return;
+    }
+
+    buf = evhttp_request_get_output_buffer(req);
+    evbuffer_add(buf, webui_html, webui_html_len);
+    hdrs_out = evhttp_request_get_output_headers(req);
+    evhttp_add_header(hdrs_out, "Content-Type", "text/html");
+    evhttp_send_reply(req, HTTP_OK, "OK", buf);
+}
+
+static void *
+thread_main(void *ctx)
+{
+    wui_context_t *context = (wui_context_t*) ctx;
+    webui_listener = evhttp_bind_socket_with_handle(
+            webui_httpd, "0.0.0.0", context->port);
+    if(!webui_listener)
+    {
+        log_fatal("Failed to bind for port: %u", context->port);
+        return 0;
+    }
+    evhttp_set_gencb(webui_httpd, process_request, ctx);
+    event_base_dispatch(webui_base);
+    event_base_free(webui_base);
+    return 0;
 }
 
 int
 start_web_ui(wui_context_t *context)
 {
     log_debug("Starting Web UI");
-    int use_epoll = MHD_is_feature_supported(MHD_FEATURE_EPOLL) == MHD_YES;
-    log_debug("MHD will use epoll: %u", use_epoll);
-
-    unsigned flags = MHD_USE_SELECT_INTERNALLY;
-    if (use_epoll)
-        flags = MHD_USE_EPOLL_INTERNALLY_LINUX_ONLY;
-
-    mhd_daemon = MHD_start_daemon(flags,
-            context->port, NULL, NULL,
-            &answer_to_connection, (void*) context, MHD_OPTION_END);
-    return mhd_daemon != NULL ? 0 : -1;
+    if (webui_base || handle)
+    {
+        log_error("Already running");
+        return -1;
+    }
+    webui_base = event_base_new();
+    if (!webui_base)
+    {
+        log_fatal("Failed to create httpd event base");
+        return 0;
+    }
+    webui_httpd = evhttp_new(webui_base);
+    if (!webui_httpd)
+    {
+        log_fatal("Failed to create evhttp event");
+        return 0;
+    }
+    int rc = pthread_create(&handle, NULL, thread_main, context);
+    if (!rc)
+        pthread_detach(handle);
+    return rc;
 }
 
 void
 stop_web_ui(void)
 {
     log_debug("Stopping Web UI");
-    if (mhd_daemon != NULL)
-        MHD_stop_daemon(mhd_daemon);
+    if (webui_listener && webui_httpd)
+        evhttp_del_accept_socket(webui_httpd, webui_listener);
+    if (webui_httpd)
+        evhttp_free(webui_httpd);
+    if (webui_base)
+        event_base_loopbreak(webui_base);
 }
 

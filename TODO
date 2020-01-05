@@ -1,7 +1,0 @@
-Things to work on:
- - Add protection against invalid share flooding
- - Offload payout processing to a separate thread (appears not needed, test
-   more)
- - Offload RPC requests to a separate thread (appears not needed, test more)
-
-[//]: # ( vim: set tw=80: )

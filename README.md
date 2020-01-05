@@ -21,9 +21,7 @@ mine on. Further information can be found in [stratum-ss.md](./stratum-ss.md).
 
 I have tested this quite a bit on the Monero testnet (if you plan
 to do the same, ensure to use `--testnet` flag when starting your wallet and
-daemon) and mainnet, but there is always room for improvement. Please see the
-[TODO](./TODO) file for the current list of things that could do with looking
-at.
+daemon) and mainnet, but there is always room for improvement.
 
 There is also a reference mainnet pool setup and running at
 [http://monerop.com](http://monerop.com).
@@ -52,14 +50,13 @@ to build the pool:
 - liblmdb
 - libevent
 - json-c
-- libmicrohttpd
 - uuid
 
 As an example, on Ubuntu, these dependencies can be installed with the following
 command:
 
 ```
-sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev libmicrohttpd-dev uuid-dev
+sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 ```
 ### Compile
 
@@ -128,6 +125,17 @@ Then simply `cd build/debug|release` and run `./monero-pool`.
 There is a minimal web UI that gets served on the port specified in the config
 file. It's advisable to use either Apache or Nginx as a proxy in front of this
 with some appropriate caching.
+
+## SSL
+
+The pool has been tested behind both [HAProxy](http://www.haproxy.org/) and
+[stunnel](https://www.stunnel.org/), so if you wish to provide SSL access to the
+pool, these are both good options and simple to setup. The [reference
+pool](https://monerop.com) makes use of HAProxy and port 4343 for SSL traffic.
+
+The web UI, as mentioned above, should ideally be placed behind a *caching
+proxy*. Therefore SSL termination should be be configured there (i.e. in
+Apache/Nginx).
 
 ## Supporting the project
 
