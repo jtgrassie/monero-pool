@@ -22,8 +22,23 @@
             td:last-child {
                 white-space: unset;
             }
-            .wallet {
+            .miner {
                 display: none;
+            }
+            td.address {
+                min-width: 10ch;
+                max-width: 10ch;
+                overflow: hidden;
+                border-bottom: 1px dashed black;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                word-wrap: unset;
+            }
+            td.address:focus {
+                outline: 0px solid transparent;
+                text-overflow: initial;
+                white-space: initial;
+                word-wrap: break-word;
             }
         </style>
     </head>
@@ -41,17 +56,9 @@
             <tr><td>Pool port: </td><td id="pool_port"></td></tr>
             <tr><td>Allow self-select: </td><td id="allow_self_select"></td></tr>
             <tr><td>Miners connected: </td><td id="connected_miners"></td></tr>
-            <tr class="wallet"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
-            <tr class="wallet"><td>Balance due: </td><td id="miner_balance"></td></tr>
-            <tr>
-                <td>Miner address: </td>
-                <td>
-                    <form>
-                        <input type="text" id="wa" name="wa" />
-                        <input type="submit" value="Submit" />
-                    </form>
-                </td>
-            </tr>
+            <tr class="miner"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
+            <tr class="miner"><td>Balance due: </td><td id="miner_balance"></td></tr>
+            <tr><td>Miner address: </td><td class="address" contenteditable="true"></td></tr>
         </table>
         <small><a href="https://github.com/jtgrassie/monero-pool">https://github.com/jtgrassie/monero-pool</a></small>
         <script>
@@ -96,8 +103,7 @@
                     return parseFloat(hr/1000000000).toFixed(2) + " GH/s";
             }
 
-            var f = document.querySelector("form");
-            var wa = document.querySelector("#wa");
+            var wf = document.querySelector(".address");
             var xhr = new XMLHttpRequest();
 
             xhr.onload = function()
@@ -121,12 +127,11 @@
                 }
             };
 
-            f.onsubmit = function(e)
+            wf.onblur = function(e)
             {
-                e.preventDefault();
                 var d = new Date();
                 d.setTime(d.getTime() + (86400 * 365 * 1000));
-                document.cookie = "wa=" + wa.value + ";expires=" + d.toGMTString();
+                document.cookie = "wa=" + this.innerText + ";expires=" + d.toGMTString();
                 window.location.reload();
                 return false;
             };
@@ -135,13 +140,13 @@
             {
                 if (/wa=[0-9a-fA-F]+/.test(document.cookie))
                 {
-                    var wh = document.querySelectorAll(".wallet");
-                    wh.forEach(function(e)
+                    var m = document.querySelectorAll(".miner");
+                    for (var i=0; i<m.length; i++)
                     {
-                        e.style = "display: table-row;";
-                    });
+                        m[i].style = "display: table-row;";
+                    }
                     var c = document.cookie.split("=");
-                    wa.value = c[1];
+                    wf.innerText = c[1];
                 }
                 var get_stats = function()
                 {
