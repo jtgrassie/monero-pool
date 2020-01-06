@@ -2803,7 +2803,7 @@ static void print_config()
     log_info("\nCONFIG:\n"
         "  pool-port = %u\n"
         "  pool-ssl-port = %u\n"
-        "  webui-port=%u\n"
+        "  webui-port= %u\n"
         "  rpc-host = %s\n"
         "  rpc-port = %u\n"
         "  wallet-rpc-host = %s\n"
@@ -2930,7 +2930,8 @@ cleanup(void)
     log_info("Performing cleanup");
     if (listener_event)
         event_free(listener_event);
-    stop_web_ui();
+    if (config.webui_port)
+        stop_web_ui();
     if (signal_usr1)
         event_free(signal_usr1);
     if (timer_120s)
@@ -3092,7 +3093,8 @@ int main(int argc, char **argv)
     uic.pool_ssl_port = config.pool_ssl_port;
     uic.allow_self_select = !config.disable_self_select;
     uic.payment_threshold = config.payment_threshold;
-    start_web_ui(&uic);
+    if (config.webui_port)
+        start_web_ui(&uic);
 
     run();
 
