@@ -143,7 +143,7 @@ thread_main(void *ctx)
             webui_httpd, "0.0.0.0", context->port);
     if(!webui_listener)
     {
-        log_fatal("Failed to bind for port: %u", context->port);
+        log_error("Failed to bind for port: %u", context->port);
         return 0;
     }
     evhttp_set_gencb(webui_httpd, process_request, ctx);
@@ -164,14 +164,14 @@ start_web_ui(wui_context_t *context)
     webui_base = event_base_new();
     if (!webui_base)
     {
-        log_fatal("Failed to create httpd event base");
-        return 0;
+        log_error("Failed to create httpd event base");
+        return -1;
     }
     webui_httpd = evhttp_new(webui_base);
     if (!webui_httpd)
     {
-        log_fatal("Failed to create evhttp event");
-        return 0;
+        log_error("Failed to create evhttp event");
+        return -1;
     }
     int rc = pthread_create(&handle, NULL, thread_main, context);
     if (!rc)
