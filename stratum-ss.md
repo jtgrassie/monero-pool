@@ -15,11 +15,10 @@ To address these concerns, I've implemented a new, experimental and optional
 to mine on.
 
 What follows are the instructions to test this new mode and the changes made to
-the stratum messages. For a miner to test against the pool,
+the stratum protocol. For a miner that supports this new mode,
 [XMRig](https://github.com/xmrig/xmrig) already has this implemented.
-Alternatively there is a very simple demonstration miner,
-[monero-powpy](https://github.com/jtgrassie/monero-powpy)
-(`stratum-ss-miner.py`).
+Alternatively, a very simple demonstration miner can be found in
+[monero-powpy](https://github.com/jtgrassie/monero-powpy).
 
 
 ## Running

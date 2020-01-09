@@ -3,37 +3,31 @@
 A Monero mining pool server written in C.
 
 Design decisions are focused on performance and efficiency, hence the use of
-libevent and LMDB.  Currently it uses only two threads (one for the stratum
-clients and one for the web UI clients). It gets away with this thanks to the
-efficiency of libevent (for the stratum clients) and some sensible
-proxying/caching being placed in front of the [web UI](#web-ui).
+libevent and LMDB.  Currently it uses only *two* threads under normal operation
+(one for the stratum clients and one for the web UI clients). It gets away with
+this thanks to the efficiency of both LMDB and libevent (for the stratum
+clients) and some sensible proxying/caching being placed in front of the [web
+UI](#web-ui).
 
-The single payout mechanism is PPLNS, which favors loyal pool miners.
+This pool was the *first* pool to support RandomX and is currently the *only*
+pool which supports the RandomX fast/full-memory mode.
 
-I have no plans to add any other payout mechanisms or other coins. Work should
-stay focussed on performance, efficiency and stability.
+The single payout mechanism is PPLNS, which favors loyal pool miners, and there
+are no plans to add any other payout mechanisms or other coins. Work should stay
+focussed on performance, efficiency and stability.
 
-The pool also now supports a new, experimental and optional, method of mining
-for the pool miners, whereby miners can select their *own* block template to
-mine on. Further information can be found in [stratum-ss.md](./stratum-ss.md).
+The pool also supports a new, experimental and optional, method of mining,
+whereby miners select their *own* block template to mine on. Further information
+can be found in [stratum-ss.md](./stratum-ss.md).
 
-## Project status
-
-I have tested this quite a bit on the Monero testnet (if you plan
-to do the same, ensure to use `--testnet` flag when starting your wallet and
-daemon) and mainnet, but there is always room for improvement.
-
-There is also a reference mainnet pool setup and running at
-[http://monerop.com](http://monerop.com).
-
-If you want to help with testing or help setting up your own pool, give me a
-shout on IRC: jtgrassie on Freenode.
+For testing, a reference mainnet pool can be found at
+[monerop.com](http://monerop.com).
 
 ## Compiling from source
 
 ### Dependencies
 
-The build system now requires the Monero source tree to be cloned and compiled.
+The build system requires the Monero source tree to be cloned and compiled.
 Follow the
 [instructions](https://github.com/monero-project/monero#compiling-monero-from-source)
 for compiling Monero, then export the following variable:
@@ -60,9 +54,8 @@ sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 ```
 ### Compile
 
-First install all the dependencies as described above.
-
-Then to compile the pool as a release build, run:
+After installing all the dependencies as described above, to compile the pool as
+a release build, run:
 
 ```
 make release
@@ -80,10 +73,15 @@ Debug builds are output in `build/debug/`.
 
 ## Configuration
 
-Copy and edit the `pool.conf` file to either the same directory as the compiled
-binary `monero-pool`, or place it in your home directory or launch `monero-pool`
-with the flag `--config-file path/to/pool.conf` to use a custom location. The
-configuration options should be self explanatory.
+During compilation, a copy of [pool.conf](./pool.conf) is placed in the output
+build directory. Edit this file as you see fit. When running the pool, if a
+custom location is not set via the command-line parameter `--config-file
+<file>`, the pool will first look for this file in the same directory as the
+pool binary, then in the current users home directory. The configuration options
+should all be self explanatory.
+
+There are also some [command-line parameters](#command-line-parameters) which
+can be used to override some of these settings.
 
 #### Block notification
 
@@ -104,27 +102,45 @@ monerod ... <b>--block-notify '/usr/bin/pkill -USR1 monero-pool'</b>
 This instructs `monerod` to send the required signal, *SIGUSR1*, to your pool
 whenever a new block is added to the chain.
 
-Using this mechanism has a significant benefit - your pool *immediatley* knows
+Using this mechanism has a *significant* benefit - your pool *immediatley* knows
 when to fetch a new block template to send to your miners. You're essentially
-giving your miners a head-start over miners in pools which use polling (which
-is what all the other pool implementations do).
+giving your miners a head-start over miners in pools which use polling (which is
+what all the other pool implementations do).
 
 ## Running
 
 Ensure you have your Monero daemon (`monerod`) and wallet RPC
 (`monero-wallet-rpc`) up and running with the correct host and port settings as
-defined in the pool config file.
+defined in your pool config file.
 
 It is highly recommended to run these on the same host as the pool server to
-avoid network latency when their RPC methods are called.
+avoid any network latency when their RPC methods are called.
 
-Then simply `cd build/debug|release` and run `./monero-pool`.
+Then simply `cd build/[debug|release]` and run `./monero-pool`.
+
+### Command-line parameters
+
+A few of the configuration options can be overridden via the following
+command-line parameters:
+
+    -c, --config-file <file>
+    -l, --log-file <file>
+    -b, --block-notified [0|1]
+    -d, --data-dir <dir>
+    -p, --pid-file <file>
+    -f, --forked [0|1]
 
 ## Web UI
 
 There is a minimal web UI that gets served on the port specified in the config
-file. It's advisable to use either Apache or Nginx as a proxy in front of this
-with some appropriate caching.
+file. If you plan on running a *public* pool, it's advisable to use either
+Apache or Nginx as a proxy in front of this with some appropriate caching
+configured. The goal is to offload browser based traffic to something built for
+the task and allow the pool to focus on its primary function - serving miners.
+
+If you intend to make changes to the web UI, note that the HTML gets compiled
+into the pool binary. The single web page that gets served simply makes use of a
+JSON endpoint to populate the stats.
 
 ## SSL
 
@@ -136,6 +152,12 @@ pool](https://monerop.com) makes use of HAProxy and port 4343 for SSL traffic.
 The web UI, as mentioned above, should ideally be placed behind a *caching
 proxy*. Therefore SSL termination should be be configured there (i.e. in
 Apache/Nginx).
+
+## Help / Contact
+
+If you need help setting up your own pool, you can find
+me (jtgrassie) on IRC in [#monero-pool](irc://chat.freenode.net/#monero-pool)
+and many of the other Monero channels.
 
 ## Supporting the project
 
