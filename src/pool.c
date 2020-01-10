@@ -2956,6 +2956,18 @@ cleanup(void)
         fclose(fd_log);
 }
 
+static void
+print_help(struct option *opts)
+{
+    for (; opts->name; ++opts)
+    {
+        printf("-%c, --%s %s\n", opts->val, opts->name,
+            opts->has_arg==required_argument ?
+            strstr(opts->name,"file") ? "<file>" : "<dir>" :
+            opts->has_arg==optional_argument ? "[0|1]" : "" );
+    }
+}
+
 int main(int argc, char **argv)
 {
     int evthread_use_pthreads(void);
@@ -2968,19 +2980,20 @@ int main(int argc, char **argv)
         {"data-dir", required_argument, 0, 'd'},
         {"pid-file", required_argument, 0, 'p'},
         {"forked", optional_argument, 0, 'f'},
+        {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
     char *config_file = NULL;
     char *log_file = NULL;
-    bool block_notified = false;
+    int block_notified = -1;
     char *data_dir = NULL;
     char *pid_file = NULL;
-    bool forked = false;
+    int forked = -1;
     int c;
     while (1)
     {
         int option_index = 0;
-        c = getopt_long (argc, argv, "c:l:b::d:p:f::",
+        c = getopt_long (argc, argv, "c:l:b::d:p:f::h",
                        options, &option_index);
         if (c == -1)
             break;
@@ -2993,9 +3006,13 @@ int main(int argc, char **argv)
                 log_file = strdup(optarg);
                 break;
             case 'b':
-                block_notified = true;
-                if (optarg)
-                    block_notified = atoi(optarg);
+                if (!optarg && argv[optind] && argv[optind][0] != '-')
+                {
+                    block_notified = atoi(argv[optind]);
+                    ++optind;
+                }
+                else
+                    block_notified = optarg ? atoi(optarg) : 1;
                 break;
             case 'd':
                 data_dir = strdup(optarg);
@@ -3004,9 +3021,18 @@ int main(int argc, char **argv)
                 pid_file = strdup(optarg);
                 break;
             case 'f':
-                forked = true;
-                if (optarg)
-                    forked = atoi(optarg);
+                if (!optarg && argv[optind] && argv[optind][0] != '-')
+                {
+                    forked = atoi(argv[optind]);
+                    ++optind;
+                }
+                else
+                    forked = optarg ? atoi(optarg) : 1;
+                break;
+            case 'h':
+            default:
+                print_help(options);
+                exit(-1);
                 break;
         }
     }
@@ -3033,9 +3059,9 @@ int main(int argc, char **argv)
         strncpy(config.pid_file, pid_file, sizeof(config.pid_file));
         free(pid_file);
     }
-    if (forked)
+    if (forked > -1)
         config.forked = forked;
-    if (block_notified)
+    if (block_notified > -1)
         config.block_notified = block_notified;
 
     log_set_level(LOG_FATAL - config.log_level);
