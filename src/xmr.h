@@ -35,6 +35,8 @@ developers.
 #ifndef XMR_H
 #define XMR_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,6 +51,9 @@ enum xmr_error
     XMR_TX_EXTRA_ERROR   = -5,
     XMR_MISMATCH_ERROR   = -6
 };
+
+extern const uint64_t address_prefixes[];
+extern const int address_prefixes_count;
 
 int get_hashing_blob(const unsigned char *input, const size_t in_size,
         unsigned char **output, size_t *out_size);

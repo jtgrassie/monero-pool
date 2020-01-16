@@ -49,13 +49,27 @@ developers.
 #include "ringct/rctSigs.h"
 #include "common/base58.h"
 #include "common/util.h"
+#include "cryptonote_config.h"
 #include "string_tools.h"
 
 #include "xmr.h"
 
 using namespace epee::string_tools;
+using namespace config;
 using namespace cryptonote;
 using namespace crypto;
+
+const uint64_t address_prefixes[] =
+{
+    CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
+    CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
+    CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
+    testnet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
+    testnet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
+    testnet::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
+};
+const int address_prefixes_count =
+    sizeof(address_prefixes) / sizeof(address_prefixes[0]);
 
 int get_hashing_blob(const unsigned char *input, const size_t in_size,
         unsigned char **output, size_t *out_size)
@@ -180,4 +194,3 @@ int validate_block_from_blob(const char *blob_hex,
 
     return XMR_NO_ERROR;
 }
-

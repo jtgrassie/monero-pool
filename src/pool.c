@@ -79,8 +79,6 @@ developers.
 #define CLIENT_JOBS_MAX 4
 #define BLOCK_HEADERS_MAX 4
 #define BLOCK_TEMPLATES_MAX 4
-#define MAINNET_ADDRESS_PREFIX 18
-#define TESTNET_ADDRESS_PREFIX 53
 #define BLOCK_HEADERS_RANGE 10
 #define DB_SIZE 0x140000000 /* 5G */
 #define DB_COUNT_MAX 10
@@ -2089,10 +2087,18 @@ client_on_login(json_object *message, client_t *client)
     const char *address = json_object_get_string(login);
     uint64_t prefix;
     parse_address(address, &prefix, NULL);
-    if (prefix != MAINNET_ADDRESS_PREFIX && prefix != TESTNET_ADDRESS_PREFIX)
+    bool valid_prefix = false;
+    for (int i = 0; i < address_prefixes_count; i++)
     {
-        send_validation_error(client,
-                "login only main wallet addresses are supported");
+      if (prefix == address_prefixes[i])
+      {
+        valid_prefix = true;
+        break;
+      }
+    }
+    if (!valid_prefix)
+    {
+        send_validation_error(client, "invalid address");
         return;
     }
 
