@@ -45,6 +45,7 @@ developers.
 #include "cryptonote_basic/difficulty.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
+#include "cryptonote_config.h"
 #include "serialization/binary_utils.h"
 #include "ringct/rctSigs.h"
 #include "common/base58.h"
@@ -56,6 +57,33 @@ developers.
 using namespace epee::string_tools;
 using namespace cryptonote;
 using namespace crypto;
+using namespace config;
+
+static int nettype_from_prefix(uint8_t *nettype, uint64_t prefix)
+{
+    static const struct { cryptonote::network_type type; uint64_t prefix; } nettype_prefix[] = {
+        { MAINNET, CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX },
+        { MAINNET, CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX },
+        { MAINNET, CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX },
+        { TESTNET, testnet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX },
+        { TESTNET, testnet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX },
+        { TESTNET, testnet::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX },
+        { STAGENET, stagenet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX },
+        { STAGENET, stagenet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX },
+        { STAGENET, stagenet::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX }
+    };
+    int rv = XMR_MISMATCH_ERROR;
+    for (auto ntp : nettype_prefix)
+    {
+        if (ntp.prefix == prefix)
+        {
+            rv = XMR_NO_ERROR;
+            *nettype = ntp.type;
+            break;
+        }
+    }
+    return rv;
+}
 
 int get_hashing_blob(const unsigned char *input, const size_t in_size,
         unsigned char **output, size_t *out_size)
@@ -75,23 +103,25 @@ int get_hashing_blob(const unsigned char *input, const size_t in_size,
 }
 
 int parse_address(const char *input, uint64_t *prefix,
-        unsigned char *pub_spend)
+        uint8_t *nettype, unsigned char *pub_spend)
 {
     uint64_t tag;
     std::string decoded;
-    bool rv = tools::base58::decode_addr(input, tag, decoded);
-    if (rv)
-    {
+    if (!tools::base58::decode_addr(input, tag, decoded))
+        return XMR_PARSE_ERROR;
+    if (prefix)
         *prefix = tag;
-        if (pub_spend != NULL)
-        {
-            account_public_address address;
-            ::serialization::parse_binary(decoded, address);
-            public_key S = address.m_spend_public_key;
-            memcpy(pub_spend, &S, 32);
-        }
+    if (nettype && nettype_from_prefix(nettype, tag))
+        return XMR_MISMATCH_ERROR;
+    if (pub_spend)
+    {
+        account_public_address address;
+        if (!::serialization::parse_binary(decoded, address))
+            return XMR_PARSE_ERROR;
+        public_key S = address.m_spend_public_key;
+        memcpy(pub_spend, &S, 32);
     }
-    return rv ? XMR_NO_ERROR : XMR_PARSE_ERROR;
+    return XMR_NO_ERROR;
 }
 
 int get_block_hash(const unsigned char *input, const size_t in_size,

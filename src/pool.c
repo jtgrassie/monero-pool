@@ -253,6 +253,7 @@ static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
 static unsigned char sec_view[32];
 static unsigned char pub_spend[32];
+static uint8_t nettype;
 
 #ifdef HAVE_RX
 extern void rx_stop_mining();
@@ -1622,9 +1623,6 @@ rpc_on_view_key(const char* data, rpc_callback_t *callback)
     const char *vk = json_object_get_string(key);
     hex_to_bin(vk, strlen(vk), &sec_view[0], 32);
     json_object_put(root);
-
-    uint64_t prefix;
-    parse_address(config.pool_wallet, &prefix, &pub_spend[0]);
 }
 
 static void
@@ -2087,12 +2085,17 @@ client_on_login(json_object *message, client_t *client)
     }
 
     const char *address = json_object_get_string(login);
-    uint64_t prefix;
-    parse_address(address, &prefix, NULL);
-    if (prefix != MAINNET_ADDRESS_PREFIX && prefix != TESTNET_ADDRESS_PREFIX)
+    uint8_t nt;
+    if (parse_address(address, NULL, &nt, NULL))
     {
         send_validation_error(client,
-                "login only main wallet addresses are supported");
+                "Invalid address");
+        return;
+    }
+    if (nt != nettype)
+    {
+        send_validation_error(client,
+                "Invalid address network type");
         return;
     }
 
@@ -2788,6 +2791,11 @@ read_config(const char *config_file)
     if (!config.pool_wallet[0])
     {
         log_fatal("No pool wallet supplied. Aborting.");
+        exit(-1);
+    }
+    if (parse_address(config.pool_wallet, NULL, &nettype, &pub_spend[0]))
+    {
+        log_fatal("Invalid pool wallet");
         exit(-1);
     }
     if (!config.wallet_rpc_host[0] || config.wallet_rpc_port == 0)
