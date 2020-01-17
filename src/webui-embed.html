@@ -146,15 +146,26 @@
 
             window.onload = function()
             {
-                if (/wa=[0-9a-fA-F]+/.test(document.cookie))
+                var jar = {};
+                for (var kv, i=0, kvs=document.cookie.split(/\s*;\s*/); i<kvs.length; i++)
+                {
+                    kv = kvs[i].split(/\s*=\s*/);
+                    if (kv.length > 1)
+                    {
+                        try {
+                            jar[kv[0]] = kv[1];
+                        } catch (e) {}
+                    }
+                }
+                if (jar.wa &&
+                    /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/.test(jar.wa))
                 {
                     var m = document.querySelectorAll(".miner");
                     for (var i=0; i<m.length; i++)
                     {
                         m[i].style = "display: table-row;";
                     }
-                    var c = document.cookie.split("=");
-                    wf.innerText = c[1];
+                    wf.innerText = jar.wa;
                 }
                 var get_stats = function()
                 {
