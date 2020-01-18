@@ -68,10 +68,12 @@ send_json_stats(struct evhttp_request *req, void *arg)
     struct evkeyvalq *hdrs_out = NULL;
     uint64_t ph = context->pool_stats->pool_hashrate;
     uint64_t nh = context->pool_stats->network_hashrate;
+    uint64_t nd = context->pool_stats->network_difficulty;
     uint64_t height = context->pool_stats->network_height;
     uint64_t ltf = context->pool_stats->last_template_fetched;
     uint64_t lbf = context->pool_stats->last_block_found;
     uint32_t pbf = context->pool_stats->pool_blocks_found;
+    uint64_t rh = context->pool_stats->round_hashes;
     unsigned ss = context->allow_self_select;
     uint64_t mh = 0;
     double mb = 0.0;
@@ -92,7 +94,9 @@ send_json_stats(struct evhttp_request *req, void *arg)
 
     evbuffer_add_printf(buf, "{"
             "\"pool_hashrate\":%"PRIu64","
+            "\"round_hashes\":%"PRIu64","
             "\"network_hashrate\":%"PRIu64","
+            "\"network_difficulty\":%"PRIu64","
             "\"network_height\":%"PRIu64","
             "\"last_template_fetched\":%"PRIu64","
             "\"last_block_found\":%"PRIu64","
@@ -105,7 +109,7 @@ send_json_stats(struct evhttp_request *req, void *arg)
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
             "\"miner_balance\":%.8f"
-            "}", ph, nh, height, ltf, lbf, pbf,
+            "}", ph, rh, nh, nd, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
             context->pool_port, context->pool_ssl_port,
             ss, context->pool_stats->connected_miners,

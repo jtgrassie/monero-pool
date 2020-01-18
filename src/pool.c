@@ -1538,6 +1538,53 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
 }
 
 static int
+startup_scan_round_shares()
+{
+    int rc;
+    char *err;
+    MDB_txn *txn;
+    MDB_cursor *cursor;
+
+    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)) != 0)
+    {
+        err = mdb_strerror(rc);
+        log_error("%s", err);
+        return rc;
+    }
+    if ((rc = mdb_cursor_open(txn, db_shares, &cursor)) != 0)
+    {
+        err = mdb_strerror(rc);
+        log_error("%s", err);
+        mdb_txn_abort(txn);
+        return rc;
+    }
+    MDB_cursor_op op = MDB_LAST;
+    while (1)
+    {
+        MDB_val key;
+        MDB_val val;
+        rc = mdb_cursor_get(cursor, &key, &val, op);
+        if (rc != 0 && rc != MDB_NOTFOUND)
+        {
+            err = mdb_strerror(rc);
+            log_error("%s", err);
+            break;
+        }
+        if (rc == MDB_NOTFOUND)
+            break;
+        op = MDB_PREV;
+        share_t *share = (share_t*)val.mv_data;
+        if (share->timestamp > pool_stats.last_block_found)
+            pool_stats.round_hashes += share->difficulty;
+        else
+            break;
+    }
+    mdb_cursor_close(cursor);
+    mdb_txn_abort(txn);
+    return 0;
+}
+
+static int
 startup_pauout(uint64_t height)
 {
     /*
@@ -1668,6 +1715,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
         startup_pauout(block->height);
+        startup_scan_round_shares();
         need_new_template = true;
     }
 
@@ -1728,6 +1776,7 @@ rpc_on_block_submitted(const char* data, rpc_callback_t *callback)
     pool_stats.pool_blocks_found++;
     block_t *b = (block_t*)callback->data;
     pool_stats.last_block_found = b->timestamp;
+    pool_stats.round_hashes = 0;
     log_info("Block submitted at height: %"PRIu64, b->height);
     int rc = store_block(b->height, b);
     if (rc != 0)
@@ -2473,6 +2522,7 @@ client_on_submit(json_object *message, client_t *client)
         share.difficulty = job->target;
         strncpy(share.address, client->address, sizeof(share.address));
         share.timestamp = now;
+        pool_stats.round_hashes += share.difficulty;
         log_debug("Storing share with difficulty: %"PRIu64, share.difficulty);
         int rc = store_share(share.height, &share);
         if (rc != 0)
