@@ -1585,7 +1585,7 @@ startup_scan_round_shares()
 }
 
 static int
-startup_pauout(uint64_t height)
+startup_payout(uint64_t height)
 {
     /*
       Loop stored blocks < height - 60
@@ -1714,7 +1714,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     {
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
-        startup_pauout(block->height);
+        startup_payout(block->height);
         startup_scan_round_shares();
         need_new_template = true;
     }

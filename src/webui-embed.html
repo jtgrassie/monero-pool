@@ -26,7 +26,7 @@
             .miner {
                 display: none;
             }
-            td.address {
+            #address {
                 min-width: 10ch;
                 max-width: 10ch;
                 overflow: hidden;
@@ -35,7 +35,7 @@
                 white-space: nowrap;
                 word-wrap: unset;
             }
-            td.address:focus {
+            #address:focus {
                 outline: 0px solid transparent;
                 text-overflow: initial;
                 white-space: initial;
@@ -62,7 +62,7 @@
             <tr><td>Miners connected: </td><td id="connected_miners"></td></tr>
             <tr class="miner"><td>Your HR: </td><td id="miner_hashrate"></td></tr>
             <tr class="miner"><td>Balance due: </td><td id="miner_balance"></td></tr>
-            <tr><td>Miner address: </td><td class="address" contenteditable="true"></td></tr>
+            <tr><td>Miner address: </td><td id="address" contenteditable="true"></td></tr>
         </table>
         <small><a href="https://github.com/jtgrassie/monero-pool">https://github.com/jtgrassie/monero-pool</a></small>
         <script>
@@ -95,26 +95,31 @@
                 }
             }
 
+            function max_precision(n, p)
+            {
+                return parseFloat(parseFloat(n).toFixed(p));
+            }
+
             function format_hashes(h)
             {
                 if (h < 1e-12)
                     return "0 H";
                 else if (h < 1e-9)
-                    return parseFloat(h*1e+12).toFixed(2) + " pH";
+                    return max_precision(h*1e+12, 0) + " pH";
                 else if (h < 1e-6)
-                    return parseFloat(h*1e+9).toFixed(2) + " nH";
+                    return max_precision(h*1e+9, 0) + " nH";
                 else if (h < 1e-3)
-                    return parseFloat(h*1e+6).toFixed(2) + " μH";
+                    return max_precision(h*1e+6, 0) + " μH";
                 else if (h < 1)
-                    return parseFloat(h*1e+3).toFixed(2) + " mH";
+                    return max_precision(h*1e+3, 0) + " mH";
                 else if (h < 1e+3)
                     return parseInt(h) + " H";
                 else if (h < 1e+6)
-                    return parseFloat(h*1e-3).toFixed(2) + " KH";
+                    return max_precision(h*1e-3, 2) + " KH";
                 else if (h < 1e+9)
-                    return parseFloat(h*1e-6).toFixed(2) + " MH";
+                    return max_precision(h*1e-6, 2) + " MH";
                 else
-                    return parseFloat(h*1e-9).toFixed(2) + " GH";
+                    return max_precision(h*1e-9, 2) + " GH";
             }
 
             function format_hashrate(h)
@@ -130,11 +135,12 @@
                     return 0;
                 if (diff <= 0)
                     return 0;
-                return format_hashrate(round_hashes / diff)
+                return format_hashrate(round_hashes / diff);
             }
 
-            var wf = document.querySelector(".address");
+            var wf = document.querySelector("#address");
             var xhr = new XMLHttpRequest();
+            var rhr = document.querySelector("#round_hashrate");
 
             xhr.onload = function()
             {
@@ -144,7 +150,7 @@
                     var el = document.querySelector("#"+e);
                     if (!el)
                         continue;
-                    if (e == "last_block_found" || e == "last_template_fetched")
+                    if (/^last/.test(e))
                         el.innerHTML = format_last_time(stats[e]);
                     else if (/hashrate/.test(e))
                         el.innerHTML = format_hashrate(stats[e]);
@@ -154,9 +160,12 @@
                         el.innerHTML = stats[e] == 1 ? "Yes" : "No";
                     else if (e == "round_hashes")
                     {
-                        el.innerHTML = (stats[e]*100/stats["network_difficulty"]).toFixed(2) + "%"
-                        el.innerHTML += " (" + format_hashes(stats[e]) + " / " + format_hashes(stats["network_difficulty"]) + ")";
-                        document.querySelector("#round_hashrate").innerHTML = format_round_hashrate(stats["round_hashes"], stats["last_block_found"]);
+                        el.innerHTML = max_precision(stats[e]*100 /
+                            stats["network_difficulty"], 1) + "%" +
+                            " (" + format_hashes(stats[e]) + " / " +
+                            format_hashes(stats["network_difficulty"]) + ")";
+                        rhr.innerHTML = format_round_hashrate(
+                            stats["round_hashes"], stats["last_block_found"]);
                     }
                     else if (e == "pool_ssl_port")
                     {
@@ -173,7 +182,8 @@
             {
                 var d = new Date();
                 d.setTime(d.getTime() + (86400 * 365 * 1000));
-                document.cookie = "wa=" + this.innerText + ";expires=" + d.toGMTString();
+                document.cookie = "wa=" + this.innerText +
+                    ";expires=" + d.toGMTString();
                 window.location.reload();
                 return false;
             };
