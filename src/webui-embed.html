@@ -73,6 +73,8 @@
                 var v;
                 if (last == 0)
                     return "None yet";
+                else if (diff <= 0)
+                    return "Just now";
                 else if (diff < 60)
                 {
                     v = parseInt(diff);
