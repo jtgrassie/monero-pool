@@ -134,6 +134,7 @@ typedef struct config_t
     uint64_t pool_start_diff;
     double share_mul;
     uint32_t retarget_time;
+    double retarget_ratio;
     double pool_fee;
     double payment_threshold;
     uint32_t pool_port;
@@ -842,8 +843,8 @@ template_recycle(void *item)
     }
 }
 
-static void
-retarget(client_t *client, job_t *job)
+static uint64_t
+client_target(client_t *client, job_t *job)
 {
     uint64_t bd = 0xFFFFFFFFFFFFFFFF;
     if (job->block_template)
@@ -852,6 +853,20 @@ retarget(client_t *client, job_t *job)
     uint8_t retarget_time = client->is_xnp ? 5 : config.retarget_time;
     uint64_t target = fmin(fmax((double)client->hashes /
             duration * retarget_time, config.pool_start_diff), bd);
+    return target;
+}
+
+static bool
+retarget_required(client_t *client, job_t *job)
+{
+    return ((double)job->target / client_target(client, job)
+            < config.retarget_ratio);
+}
+
+static void
+retarget(client_t *client, job_t *job)
+{
+    uint64_t target = client_target(client, job);
     job->target = target;
     log_debug("Client %.32s target now %"PRIu64, client->client_id, target);
 }
@@ -2531,6 +2546,12 @@ client_on_submit(json_object *message, client_t *client)
         stratum_get_status_body(body, client->json_id, "OK");
         evbuffer_add(output, body, strlen(body));
     }
+    if (retarget_required(client, job))
+    {
+        log_debug("Sending an early job as this was less than %u%% of"
+                " potential", (unsigned)(100.*config.retarget_ratio));
+        client_send_job(client, false);
+    }
 }
 
 static void
@@ -2695,6 +2716,7 @@ read_config(const char *config_file)
     config.pool_start_diff = 100;
     config.share_mul = 2.0;
     config.retarget_time = 120;
+    config.retarget_ratio = 0.55;
     config.pool_fee = 0.01;
     config.payment_threshold = 0.33;
     config.pool_port = 4242;
@@ -2807,6 +2829,10 @@ read_config(const char *config_file)
         {
             config.retarget_time = atoi(val);
         }
+        else if (strcmp(key, "retarget-ratio") == 0)
+        {
+            config.retarget_ratio = atof(val);
+        }
         else if (strcmp(key, "log-level") == 0)
         {
             config.log_level = atoi(val);
@@ -2854,6 +2880,13 @@ read_config(const char *config_file)
                 "Aborting.");
         exit(-1);
     }
+    if (config.retarget_ratio < 0 || config.retarget_ratio > 1)
+    {
+        log_fatal("Set retarget-ratio to any rational value within range "
+                "[0, 1]. Clients will receive new jobs earlier if their latest"
+                " work is less than retarget-ratio percentage of potential.");
+        exit(-1);
+    }
 
 }
 static void print_config()
@@ -2873,6 +2906,7 @@ static void print_config()
         "  payment-threshold = %.2f\n"
         "  share-mul = %.2f\n"
         "  retarget-time = %u\n"
+        "  retarget-ratio = %.2f\n"
         "  log-level = %u\n"
         "  log-file = %s\n"
         "  block-notified = %u\n"
@@ -2894,6 +2928,7 @@ static void print_config()
         config.payment_threshold,
         config.share_mul,
         config.retarget_time,
+        config.retarget_ratio,
         config.log_level,
         config.log_file,
         config.block_notified,
