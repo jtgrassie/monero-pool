@@ -2585,17 +2585,6 @@ client_on_read(struct bufferevent *bev, void *ctx)
         return;
     }
 
-    if (client->bad_shares > MAX_BAD_SHARES)
-    {
-        char body[ERROR_BODY_MAX];
-        stratum_get_error_body(body, client->json_id, too_bad);
-        evbuffer_add(output, body, strlen(body));
-        log_info(too_bad);
-        evbuffer_drain(input, len);
-        client_clear(bev);
-        return;
-    }
-
     while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF)))
     {
         json_object *message = json_tokener_parse(line);
@@ -2657,6 +2646,16 @@ client_on_read(struct bufferevent *bev, void *ctx)
             stratum_get_error_body(body, client->json_id, unknown_method);
             evbuffer_add(output, body, strlen(body));
             log_info(unknown_method);
+            evbuffer_drain(input, len);
+            client_clear(bev);
+            return;
+        }
+        if (client->bad_shares > MAX_BAD_SHARES)
+        {
+            char body[ERROR_BODY_MAX];
+            stratum_get_error_body(body, client->json_id, too_bad);
+            evbuffer_add(output, body, strlen(body));
+            log_info(too_bad);
             evbuffer_drain(input, len);
             client_clear(bev);
             return;
