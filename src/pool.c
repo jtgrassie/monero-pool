@@ -337,11 +337,7 @@ compare_share(const MDB_val *a, const MDB_val *b)
 {
     const share_t *va = (const share_t*) a->mv_data;
     const share_t *vb = (const share_t*) b->mv_data;
-    int sc = strcmp(va->address, vb->address);
-    if (sc == 0)
-        return (va->timestamp < vb->timestamp) ? -1 : 1;
-    else
-        return sc;
+    return (va->timestamp < vb->timestamp) ? -1 : 1;
 }
 
 static int
