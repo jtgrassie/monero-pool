@@ -16,9 +16,9 @@ The single payout mechanism is PPLNS, which favors loyal pool miners, and there
 are no plans to add any other payout mechanisms or other coins. Work should stay
 focussed on performance, efficiency and stability.
 
-The pool also supports a new, experimental and optional, method of mining,
-whereby miners select their *own* block template to mine on. Further information
-can be found in [stratum-ss.md](./stratum-ss.md).
+The pool also supports an optional method of mining whereby miners select their
+*own* block template to mine on. Further information can be found in the
+document: [Stratum mode self-select](./stratum-ss.md).
 
 For testing, a reference mainnet pool can be found at
 [monerop.com](http://monerop.com).

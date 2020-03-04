@@ -10,46 +10,15 @@ template they are mining, they also have no visibility of the transactions
 included in the block template. This enables a malicious pool be selective as to
 which transactions get included (or not) into a block.
 
-To address these concerns, I've implemented a new, experimental and optional
-*mode* to this pool, which enables miners to select their *own* block template
-to mine on.
+To address these concerns, I've implemented an optional *mode* for this pool,
+which enables miners to select their *own* block template to mine on.
 
-What follows are the instructions to test this new mode and the changes made to
-the stratum protocol. For a miner that supports this new mode,
-[XMRig](https://github.com/xmrig/xmrig) already has this implemented.
-Alternatively, a very simple demonstration miner can be found in
-[monero-powpy](https://github.com/jtgrassie/monero-powpy).
+Along with this pool, the popular miner [XMRig](https://github.com/xmrig/xmrig)
+has this mode implemented. There is also a very simple [demonstration
+miner](https://github.com/jtgrassie/monero-powpy/blob/master/stratum-ss-miner.py)
+in the [monero-powpy](https://github.com/jtgrassie/monero-powpy) project which
+can be used to augment this document for implementers.
 
-
-## Running
-
-Start your `monerod` and `monero-wallet-rpc`. For example, in one
-shell:
-
-    cd "$MONERO_ROOT"/build/Linux/master/release/bin
-    ./monerod --testnet
-
-And in another shell:
-
-    cd "$MONERO_ROOT"/build/Linux/master/release/bin
-    ./monero-wallet-rpc --testnet --rpc-bind-port 28084 --disable-rpc-login \
-        --password "" --wallet-file ~/testnet-pool-wallet
-
-Next, in a third shell, run `monero-pool`. Instructions per the
-[README](./README.md#running).
-
-Lastly you'll need to use a miner that supports this new stratum mode (see
-above):
-
- - If using [XMRig](https://github.com/xmrig/xmrig), just adjust your pool
-   object in your `config.json` file setting the `self-select` field to your
-   daemon address (e.g. `"self-select": "localhost:28081"`).
-
- - If using [monero-powpy](https://github.com/jtgrassie/monero-powpy), install
-   the requirements per the projects
-   [README](https://github.com/jtgrassie/monero-powpy/blob/master/README.md),
-   then just run the `stratum-ss-miner.py` miner, optionally editing the
-   parameters first.
 
 ## Specification
 
@@ -88,11 +57,12 @@ and an extra nonce:
         "id":1
     }
 
-(3) The miner can now call the daemons RPC method
-[get_block_template](https://ww.getmonero.org/resources/developer-guides/daemon-rpc.html#get_block_template)
-with parameters `extra_nonce: extra_nonce` (implemented in pull request
-[#5728](https://github.com/monero-project/monero/pull/5728)), and
-`wallet_address: pool_wallet`.
+(3) The miner can now call a local, or remote, Monero daemons RPC method
+[get_block_template](https://getmonero.org/resources/developer-guides/daemon-rpc.html#get_block_template)
+with parameters `extra_nonce: "<extra nonce hex>"` (implemented in pull request
+[#5728](https://github.com/monero-project/monero/pull/5728)) and
+`wallet_address: "<pool wallet address>"`, using the result values from step #2
+above.
 
 The miner now informs the pool of the resulting block template it will use for
 the job:
@@ -122,6 +92,11 @@ a status:
         "jsonrpc": "2.0",
         "id":1
     }
+
+The *degree* of validation required is at the discretion of the pool
+implementer.  This pool simply ensures the supplied block template can be parsed
+as a Monero block and that the destination coinbase reward pays out to the pool
+wallet.
 
 (5) The miner submits results. No changes here:
 
