@@ -137,6 +137,7 @@ typedef struct config_t
     double retarget_ratio;
     double pool_fee;
     double payment_threshold;
+    char pool_listen[256];
     uint32_t pool_port;
     uint32_t pool_ssl_port;
     uint32_t log_level;
@@ -2705,7 +2706,7 @@ static void
 read_config(const char *config_file)
 {
     /* Start with some defaults for any missing... */
-    strncpy(config.rpc_host, "127.0.0.1", 10);
+    strcpy(config.rpc_host, "127.0.0.1");
     config.rpc_port = 18081;
     config.rpc_timeout = 15;
     config.pool_start_diff = 100;
@@ -2714,13 +2715,14 @@ read_config(const char *config_file)
     config.retarget_ratio = 0.55;
     config.pool_fee = 0.01;
     config.payment_threshold = 0.33;
+    strcpy(config.pool_listen, "0.0.0.0");
     config.pool_port = 4242;
     config.pool_ssl_port = 0;
     config.log_level = 5;
     config.webui_port = 4243;
     config.block_notified = false;
     config.disable_self_select = false;
-    strncpy(config.data_dir, "./data", 7);
+    strcpy(config.data_dir, "./data");
 
     char path[MAX_PATH] = {0};
     if (config_file)
@@ -2755,12 +2757,14 @@ read_config(const char *config_file)
         log_fatal("Cannot open config file. Aborting.");
         exit(-1);
     }
-    char line[256];
+    char line[1024];
     char *key;
     char *val;
     const char *tok = " =";
     while (fgets(line, sizeof(line), fp))
     {
+        if (*line == '#')
+            continue;
         key = strtok(line, tok);
         if (!key)
             continue;
@@ -2768,7 +2772,11 @@ read_config(const char *config_file)
         if (!val)
             continue;
         val[strcspn(val, "\r\n")] = 0;
-        if (strcmp(key, "pool-port") == 0)
+        if (strcmp(key, "pool-listen") == 0)
+        {
+            strncpy(config.pool_listen, val, sizeof(config.pool_listen));
+        }
+        else if (strcmp(key, "pool-port") == 0)
         {
             config.pool_port = atoi(val);
         }
@@ -2887,6 +2895,7 @@ read_config(const char *config_file)
 static void print_config()
 {
     log_info("\nCONFIG:\n"
+        "  pool-listen = %s\n"
         "  pool-port = %u\n"
         "  pool-ssl-port = %u\n"
         "  webui-port= %u\n"
@@ -2909,6 +2918,7 @@ static void print_config()
         "  data-dir = %s\n"
         "  pid-file = %s\n"
         "  forked = %u\n",
+        config.pool_listen,
         config.pool_port,
         config.pool_ssl_port,
         config.webui_port,
@@ -2951,7 +2961,9 @@ static void
 run(void)
 {
     evutil_socket_t listener;
-    struct sockaddr_in sin;
+    struct addrinfo *info;
+    int rc;
+    char port[6];
 
     base = event_base_new();
     if (!base)
@@ -2960,11 +2972,14 @@ run(void)
         return;
     }
 
-    sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = 0;
-    sin.sin_port = htons(config.pool_port);
+    sprintf(port, "%d", config.pool_port);
+    if ((rc = getaddrinfo(config.pool_listen, port, 0, &info)))
+    {
+        log_fatal("Error parsing listen address: %s", gai_strerror(rc));
+        return;
+    }
 
-    listener = socket(AF_INET, SOCK_STREAM, 0);
+    listener = socket(info->ai_family, SOCK_STREAM, 0);
     evutil_make_socket_nonblocking(listener);
 
 #ifndef WIN32
@@ -2974,7 +2989,7 @@ run(void)
     }
 #endif
 
-    if (bind(listener, (struct sockaddr*)&sin, sizeof(sin)) < 0)
+    if (bind(listener, info->ai_addr, info->ai_addrlen) < 0)
     {
         perror("bind");
         return;
@@ -3204,6 +3219,7 @@ int main(int argc, char **argv)
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
+    strncpy(uic.pool_listen, config.pool_listen, sizeof(uic.pool_listen));
     uic.pool_port = config.pool_port;
     uic.pool_ssl_port = config.pool_ssl_port;
     uic.allow_self_select = !config.disable_self_select;

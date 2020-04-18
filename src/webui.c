@@ -144,7 +144,7 @@ thread_main(void *ctx)
 {
     wui_context_t *context = (wui_context_t*) ctx;
     webui_listener = evhttp_bind_socket_with_handle(
-            webui_httpd, "0.0.0.0", context->port);
+            webui_httpd, context->pool_listen, context->port);
     if(!webui_listener)
     {
         log_error("Failed to bind for port: %u", context->port);
