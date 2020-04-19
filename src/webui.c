@@ -159,7 +159,7 @@ thread_main(void *ctx)
 int
 start_web_ui(wui_context_t *context)
 {
-    log_debug("Starting Web UI");
+    log_info("Starting Web UI on %s:%d", context->pool_listen, context->port);
     if (webui_base || handle)
     {
         log_error("Already running");

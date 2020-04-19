@@ -50,13 +50,13 @@ typedef struct pool_stats_t
 
 typedef struct wui_context_t
 {
-    uint32_t port;
+    uint16_t port;
     pool_stats_t *pool_stats;
     double pool_fee;
     double payment_threshold;
-    uint32_t pool_port;
+    uint16_t pool_port;
     char pool_listen[256];
-    uint32_t pool_ssl_port;
+    uint16_t pool_ssl_port;
     unsigned allow_self_select;
 } wui_context_t;
 

@@ -9,6 +9,10 @@ this thanks to the efficiency of both LMDB and libevent (for the stratum
 clients) and some sensible proxying/caching being placed in front of the [web
 UI](#web-ui).
 
+Configuration is extremely flexible, now allowing for the pool to run in a
+variety of setups, such as highly available and redundant configurations.
+Discussed further below in: [Interconnected pools](#Interconnected-pools).
+
 This pool was the *first* pool to support RandomX and is currently the *only*
 pool which supports the RandomX fast/full-memory mode.
 
@@ -18,7 +22,7 @@ focussed on performance, efficiency and stability.
 
 The pool also supports an optional method of mining whereby miners select their
 *own* block template to mine on. Further information can be found in the
-document: [Stratum mode self-select](./stratum-ss.md).
+document: [Stratum mode self-select](./sss.md).
 
 For testing, a reference mainnet pool can be found at
 [monerop.com](http://monerop.com).
@@ -83,15 +87,14 @@ should all be self explanatory.
 There are also some [command-line parameters](#command-line-parameters) which
 can be used to override some of these settings.
 
-#### Block notification
+### Block notification
 
-There is one configuration option that deserves a special mention.
-
-You can optionally start the pool with the flag `--block-notified` (or set in
+The pool can optionally be started with the flag `--block-notified` (or set in
 the config file: `block-notified = 1`). This will prevent the pool from
-*polling* for new blocks using a timer, and instead, fetch a new block template
-when it receives a *signal* (specifically, *SIGUSR1*). Now whenever you start
-`monerod`, you'll make use of its `--block-notify` option.
+*polling* for new blocks (using a timer), and instead fetch a new block template
+when it receives a *signal* (specifically, *SIGUSR1*). The Monero daemon,
+`monerod`, has a feature whereby it can execute a command whenever a block as
+added to the chain, which can thus be used to generate the required signal.
 
 E.g.
 
@@ -99,13 +102,79 @@ E.g.
 monerod ... <b>--block-notify '/usr/bin/pkill -USR1 monero-pool'</b>
 </pre>
 
-This instructs `monerod` to send the required signal, *SIGUSR1*, to your pool
-whenever a new block is added to the chain.
+Launching `monerod` like this instructs it to send the required signal,
+*SIGUSR1*, to the pool whenever a new block is added to the chain.
 
-Using this mechanism has a *significant* benefit - your pool *immediatley* knows
+Using this mechanism has a *significant* benefit - your pool *immediately* knows
 when to fetch a new block template to send to your miners. You're essentially
 giving your miners a head-start over miners in pools which use polling (which is
-what all the other pool implementations do).
+what currently all the other pool implementations do).
+
+### Interconnected pools
+
+In some situations it's desirable to run multiple pool instances that behave as
+one. Some examples being:
+
+ - When running a global public pool, it's desirable to offer extremely
+   low-latency pool connections to geographically dispersed miners.
+ - When running a private pool across multiple data centers, it's desirable to
+   make use of the internal site-to-site network makeup.
+ - Where there are multiple hosts available, it's desirable to offer extra
+   redundancy.
+
+To meet these needs, multiple instances of the pool can be run with each
+behaving either as an edge pool, an upstream pool, both (i.e. bridged) or a
+normal single pool.
+
+Any pool that has an upstream pool configured does almost everything a normal
+pool does, with the exception that it offloads payout processing to its upstream
+pool, thus it relays validated shares and blocks to the upstream pool. In
+return, the upstream pool sends the combined pools stats, balance updates and
+handles the payout processing.  Should an upstream become unreachable, the
+downstream pools continue as normal, then upon reconnection to the upstream,
+sends over the backlog of shares and blocks accumulated whilst the upstream was
+unreachable.
+
+Configuration is fairly trivial. A pool that will allow downstream pools to
+connect to it, does so via the config file parameters `trusted-listen`,
+`trusted-port` and `trusted-allowed`. E.g.
+
+    trusted-listen = 10.0.0.1
+    trusted-port = 4244
+    trusted-allowed = 10.0.0.2,10.0.0.3
+
+As share validation is performed on the edge pools, it's ***vitally*** important
+this trusted listener is secured. Ideally it's only bound to an internal / local
+network / private interface and specifying the IP addresses of the downstream
+pools allowed to connect to it (as in the example above). If the interface being
+bound to is already secured, the parameter `trusted-allowed` can be omitted.
+
+Then the downstream pools (`10.0.0.2` and `10.0.0.3` in the above example), need
+to include in their config files the parameters `upstream-host` and
+`upstream-port`. E.g.
+
+    upstream-host = 10.0.0.1
+    upstream-port = 4244
+
+To create a bridged pool, use all five parameters discussed above. For example:
+
+    trusted-listen = 10.0.0.4
+    trusted-port = 4244
+    trusted-allowed = 10.0.0.5,10.0.0.6
+    upstream-host = 10.0.0.1
+    upstream-port = 4244
+
+An example where bridging can be useful is for spanning network providers, e.g.
+using a global provider for the main pool hubs (the bridges) and local providers
+for edge pools within a territory.
+
+Every pool, however configured, still needs RPC access to a Monero daemon.  They
+can of course all be configured to use the *same* daemon, or for extra
+redundancy, make use of separate daemons. Downstream pools do not need RPC
+access to the pool's wallet, only the final upstream needs wallet access. If
+Stratum mode self-select is being offered, the pool wallet view key can be set
+in the downstream pool config files via the `pool-view-key` parameter, or by
+running a local view-only wallet RPC.
 
 ## Running
 
@@ -132,15 +201,21 @@ command-line parameters:
 
 ## Web UI
 
-There is a minimal web UI that gets served on the port specified in the config
-file. If you plan on running a *public* pool, it's advisable to use either
-Apache or Nginx as a proxy in front of this with some appropriate caching
-configured. The goal is to offload browser based traffic to something built for
-the task and allow the pool to focus on its primary function - serving miners.
+This project is not designed to be a one-stop solution for running a public
+pool; it is an highly efficient mining pool implementation. For a public pool,
+which typically entails having a fancy web UI, that part is down to you. There
+is howeveer a minimal web UI that gets served on the port specified in the
+config file. If you plan on running a *public* pool via this UI (or any other
+for that matter), it's advisable to use either Apache or Nginx as a proxy in
+   front of this with some appropriate caching configured. The goal is to
+   offload browser based traffic to something built for the task and allow the
+   pool to focus on its primary function - serving miners.
 
-If you intend to make changes to the web UI, note that the HTML gets compiled
-into the pool binary. The single web page that gets served simply makes use of a
-JSON endpoint to populate the stats.
+If you intend to make changes to this minimal web UI, note that the HTML gets
+compiled into the pool binary. The single web page that gets served simply makes
+use of a JSON endpoint to populate the stats. Thus, a sensible option for your
+own web UI is to simply make use of that endpoint (for stats and balances), and
+keep your website completely separate, served by Apache or Nginx for example.
 
 ## SSL
 
