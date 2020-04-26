@@ -271,6 +271,7 @@ static BN_CTX *bn_ctx;
 static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
 static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mutex_log = PTHREAD_MUTEX_INITIALIZER;
 static FILE *fd_log;
 static unsigned char sec_view[32];
 static unsigned char pub_spend[32];
@@ -3362,6 +3363,15 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
 }
 
 static void
+log_lock(void *ud, int lock)
+{
+    if (lock)
+        pthread_mutex_lock(ud);
+    else
+        pthread_mutex_unlock(ud);
+}
+
+static void
 read_config(const char *config_file)
 {
     /* Start with some defaults for any missing... */
@@ -3896,6 +3906,7 @@ cleanup(void)
     rx_stop_mining();
     rx_slow_hash_free_state();
     pthread_mutex_destroy(&mutex_clients);
+    pthread_mutex_destroy(&mutex_log);
     log_info("Pool shutdown successfully");
     if (fd_log)
         fclose(fd_log);
@@ -3981,6 +3992,8 @@ int main(int argc, char **argv)
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     log_set_level(LOG_INFO);
+    log_set_lock(log_lock);
+    log_set_udata(&mutex_log);
 
     read_config(config_file);
     if (config_file)
