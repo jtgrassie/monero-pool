@@ -271,6 +271,8 @@ static MDB_dbi db_properties;
 static BN_CTX *bn_ctx;
 static BIGNUM *base_diff;
 static pool_stats_t pool_stats;
+static unsigned clients_reading;
+static pthread_cond_t cond_clients = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutex_log = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutex_tx = PTHREAD_MUTEX_INITIALIZER;
@@ -598,6 +600,9 @@ store_block(uint64_t height, block_t *block)
 uint64_t
 miner_hr(const char *address)
 {
+    pthread_mutex_lock(&mutex_clients);
+    clients_reading++;
+    pthread_mutex_unlock(&mutex_clients);
     client_t *c = pool_clients.clients;
     uint64_t hr = 0;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
@@ -612,6 +617,10 @@ miner_hr(const char *address)
             continue;
         }
     }
+    pthread_mutex_lock(&mutex_clients);
+    clients_reading--;
+    pthread_cond_signal(&cond_clients);
+    pthread_mutex_unlock(&mutex_clients);
     return hr;
 }
 
@@ -2674,6 +2683,8 @@ client_add(int fd, struct bufferevent *bev, bool downstream)
     if (resize)
     {
         pthread_mutex_lock(&mutex_clients);
+        while (clients_reading)
+            pthread_cond_wait(&cond_clients, &mutex_clients);
         pool_clients.count += POOL_CLIENTS_GROW;
         c = realloc(pool_clients.clients, sizeof(client_t) *
                 pool_clients.count);
@@ -3186,9 +3197,13 @@ miner_on_read(struct bufferevent *bev, void *ctx)
     size_t n;
     client_t *client = NULL;
 
+    pthread_mutex_lock(&mutex_clients);
+    clients_reading++;
+    pthread_mutex_unlock(&mutex_clients);
+
     client_find(bev, &client);
     if (!client)
-        return;
+        goto unlock;
 
     input = bufferevent_get_input(bev);
     output = bufferevent_get_output(bev);
@@ -3202,7 +3217,7 @@ miner_on_read(struct bufferevent *bev, void *ctx)
         log_info(too_long);
         evbuffer_drain(input, len);
         client_clear(bev);
-        return;
+        goto unlock;
     }
 
     while ((line = evbuffer_readln(input, &n, EVBUFFER_EOL_LF)))
@@ -3217,7 +3232,7 @@ miner_on_read(struct bufferevent *bev, void *ctx)
             log_info(invalid_json);
             evbuffer_drain(input, len);
             client_clear(bev);
-            return;
+            goto unlock;
         }
         JSON_GET_OR_WARN(method, message, json_type_string);
         JSON_GET_OR_WARN(id, message, json_type_int);
@@ -3268,7 +3283,7 @@ miner_on_read(struct bufferevent *bev, void *ctx)
             log_info(unknown_method);
             evbuffer_drain(input, len);
             client_clear(bev);
-            return;
+            goto unlock;
         }
         if (client->bad_shares > MAX_BAD_SHARES)
         {
@@ -3278,9 +3293,14 @@ miner_on_read(struct bufferevent *bev, void *ctx)
             log_info(too_bad);
             evbuffer_drain(input, len);
             client_clear(bev);
-            return;
+            goto unlock;
         }
     }
+unlock:
+    pthread_mutex_lock(&mutex_clients);
+    clients_reading--;
+    pthread_cond_signal(&cond_clients);
+    pthread_mutex_unlock(&mutex_clients);
 }
 
 static void
@@ -3293,6 +3313,8 @@ trusted_on_read(struct bufferevent *bev, void *ctx)
     size_t len;
 
     pthread_mutex_lock(&mutex_clients);
+    clients_reading++;
+    pthread_mutex_unlock(&mutex_clients);
     client_find(bev, &client);
     if (!client)
         goto unlock;
@@ -3356,6 +3378,9 @@ trusted_on_read(struct bufferevent *bev, void *ctx)
         }
     }
 unlock:
+    pthread_mutex_lock(&mutex_clients);
+    clients_reading--;
+    pthread_cond_signal(&cond_clients);
     pthread_mutex_unlock(&mutex_clients);
 }
 
@@ -3981,6 +4006,7 @@ cleanup(void)
     pthread_mutex_destroy(&mutex_clients);
     pthread_mutex_destroy(&mutex_log);
     pthread_mutex_destroy(&mutex_tx);
+    pthread_cond_destroy(&cond_clients);
     log_info("Pool shutdown successfully");
     if (fd_log)
         fclose(fd_log);
