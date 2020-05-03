@@ -42,13 +42,15 @@ developers.
 typedef struct bstack_t bstack_t;
 typedef void (*recycle_fun)(void*);
 
-void bstack_new(bstack_t **out, size_t count, size_t size, recycle_fun recycle);
+void bstack_new(bstack_t **out, size_t count, size_t size,
+        recycle_fun recycle);
 void bstack_free(bstack_t *q);
 void * bstack_push(bstack_t *q, void *item);
 void bstack_drop(bstack_t *q);
 void * bstack_top(bstack_t *q);
-void * bstack_peek(bstack_t *q);
 size_t bstack_count(bstack_t *q);
+
+/* iteration */
 void * bstack_next(bstack_t *q);
 void bstack_reset(bstack_t *q);
 

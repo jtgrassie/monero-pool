@@ -116,13 +116,6 @@ bstack_drop(bstack_t *q)
 void *
 bstack_top(bstack_t *q)
 {
-    bstack_reset(q);
-    return bstack_peek(q);
-}
-
-void *
-bstack_peek(bstack_t *q)
-{
     assert(q);
     if (!q->cc)
         return NULL;

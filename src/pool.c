@@ -1636,8 +1636,8 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
         return;
     }
     pool_stats.last_template_fetched = time(NULL);
-    block_template_t *front = (block_template_t*) bstack_push(bst, NULL);
-    response_to_block_template(result, front);
+    block_template_t *top = (block_template_t*) bstack_push(bst, NULL);
+    response_to_block_template(result, top);
     pool_clients_send_job();
     json_object_put(root);
 }
@@ -1812,14 +1812,14 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(height, block_header, json_type_int);
     uint64_t bh = json_object_get_int64(height);
     bool need_new_template = false;
-    block_t *front = bstack_top(bsh);
-    if (front && bh > front->height)
+    block_t *top = bstack_top(bsh);
+    if (top && bh > top->height)
     {
         need_new_template = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
     }
-    else if (!front)
+    else if (!top)
     {
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
@@ -1828,10 +1828,10 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         need_new_template = true;
     }
 
-    front = bstack_top(bsh);
-    pool_stats.network_difficulty = front->difficulty;
-    pool_stats.network_hashrate = front->difficulty / BLOCK_TIME;
-    pool_stats.network_height = front->height;
+    top = bstack_top(bsh);
+    pool_stats.network_difficulty = top->difficulty;
+    pool_stats.network_hashrate = top->difficulty / BLOCK_TIME;
+    pool_stats.network_height = top->height;
     update_pool_hr();
 
     if (need_new_template)
@@ -1844,7 +1844,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, NULL);
         rpc_request(pool_base, body, cb1);
 
-        uint64_t end = front->height - 60;
+        uint64_t end = top->height - 60;
         uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
         rpc_get_request_body(body, "get_block_headers_range", "sdsd",
                 "start_height", start, "end_height", end);
