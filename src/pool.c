@@ -199,7 +199,7 @@ typedef struct client_t
     char worker_id[64];
     char client_id[32];
     char agent[256];
-    job_t active_jobs[CLIENT_JOBS_MAX];
+    bstack_t *active_jobs;
     uint64_t hashes;
     time_t connected_since;
     bool is_xnp;
@@ -938,6 +938,35 @@ update_pool_hr(void)
 }
 
 static void
+job_recycle(void *item)
+{
+    job_t *job = (job_t*) item;
+    log_trace("Recycle job with extra_nonce: %u", job->extra_nonce);
+    if (job->blob)
+    {
+        free(job->blob);
+        job->blob = NULL;
+    }
+    if (job->submissions)
+    {
+        free(job->submissions);
+        job->submissions = NULL;
+    }
+    if (job->miner_template)
+    {
+        block_template_t *bt = job->miner_template;
+        if (bt->blocktemplate_blob)
+        {
+            free(bt->blocktemplate_blob);
+            bt->blocktemplate_blob = NULL;
+        }
+        free(job->miner_template);
+        job->miner_template = NULL;
+    }
+    memset(job, 0, sizeof(job_t));
+}
+
+static void
 template_recycle(void *item)
 {
     block_template_t *bt = (block_template_t*) item;
@@ -1014,7 +1043,7 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
 {
     int json_id = client->json_id;
     const char *client_id = client->client_id;
-    const job_t *job = &client->active_jobs[0];
+    const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
     bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
@@ -1065,7 +1094,7 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
     /* job_id, target, pool_wallet, extra_nonce */
     int json_id = client->json_id;
     const char *client_id = client->client_id;
-    const job_t *job = &client->active_jobs[0];
+    const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
     bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     uint64_t target = job->target;
@@ -1115,7 +1144,7 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
 {
     int json_id = client->json_id;
     const char *client_id = client->client_id;
-    const job_t *job = &client->active_jobs[0];
+    const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
     bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
     const char *blob = job->blob;
@@ -1180,85 +1209,32 @@ send_validation_error(const client_t *client, const char *message)
 static void
 client_clear_jobs(client_t *client)
 {
-    for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
-    {
-        job_t *job = &client->active_jobs[i];
-        if (job->blob)
-        {
-            free(job->blob);
-            job->blob = NULL;
-        }
-        if (job->submissions)
-        {
-            free(job->submissions);
-            job->submissions = NULL;
-            job->submissions_count = 0;
-        }
-        if (job->miner_template)
-        {
-            block_template_t *bt = job->miner_template;
-            if (bt->blocktemplate_blob)
-            {
-                free(bt->blocktemplate_blob);
-                bt->blocktemplate_blob = NULL;
-            }
-            free(job->miner_template);
-            job->miner_template = NULL;
-        }
-    }
+    if (!client->active_jobs)
+        return;
+    bstack_free(client->active_jobs);
+    client->active_jobs = NULL;
 }
 
 static job_t *
 client_find_job(client_t *client, const char *job_id)
 {
     uuid_t jid;
+    job_t *job = NULL;
     hex_to_bin(job_id, strlen(job_id), (unsigned char*)&jid, sizeof(uuid_t));
-    for (size_t i=0; i<CLIENT_JOBS_MAX; i++)
+    bstack_reset(client->active_jobs);
+    while ((job = bstack_next(client->active_jobs)))
     {
-        job_t *job = &client->active_jobs[i];
         if (memcmp(job->id, jid, sizeof(uuid_t)) == 0)
-            return job;
+            break;
     }
-    return NULL;
+    return job;
 }
 
 static void
 miner_send_job(client_t *client, bool response)
 {
-    /* First cycle jobs */
-    job_t *last = &client->active_jobs[CLIENT_JOBS_MAX-1];
-    if (last->blob)
-    {
-        free(last->blob);
-        last->blob = NULL;
-    }
-    if (last->submissions)
-    {
-        free(last->submissions);
-        last->submissions = NULL;
-        last->submissions_count = 0;
-    }
-    if (last->miner_template)
-    {
-        block_template_t *bt = last->miner_template;
-        if (bt->blocktemplate_blob)
-        {
-            free(bt->blocktemplate_blob);
-            bt->blocktemplate_blob = NULL;
-        }
-        free(last->miner_template);
-        last->miner_template = NULL;
-    }
-    for (size_t i=CLIENT_JOBS_MAX-1; i>0; i--)
-    {
-        job_t *current = &client->active_jobs[i];
-        job_t *prev = &client->active_jobs[i-1];
-        memcpy(current, prev, sizeof(job_t));
-    }
-    job_t *job = &client->active_jobs[0];
-    memset(job, 0, sizeof(job_t));
-
-    block_template_t *bt = bstack_peek(bst);
+    job_t *job = bstack_push(client->active_jobs, NULL);
+    block_template_t *bt = bstack_top(bst);
     job->block_template = bt;
 
     if (client->mode == MODE_SELF_SELECT)
@@ -1375,6 +1351,8 @@ pool_clients_free(void)
     client_t *c = pool_clients.clients;
     for (size_t i = 0; i < pool_clients.count; i++, c++)
     {
+        if (!c->active_jobs)
+            continue;
         client_clear_jobs(c);
     }
     free(pool_clients.clients);
@@ -1834,7 +1812,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(height, block_header, json_type_int);
     uint64_t bh = json_object_get_int64(height);
     bool need_new_template = false;
-    block_t *front = bstack_peek(bsh);
+    block_t *front = bstack_top(bsh);
     if (front && bh > front->height)
     {
         need_new_template = true;
@@ -1850,7 +1828,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         need_new_template = true;
     }
 
-    front = bstack_peek(bsh);
+    front = bstack_top(bsh);
     pool_stats.network_difficulty = front->difficulty;
     pool_stats.network_hashrate = front->difficulty / BLOCK_TIME;
     pool_stats.network_height = front->height;
@@ -2700,6 +2678,7 @@ client_add(int fd, struct bufferevent *bev, bool downstream)
     c->bev = bev;
     c->connected_since = time(NULL);
     c->downstream = downstream;
+    bstack_new(&c->active_jobs, CLIENT_JOBS_MAX, sizeof(job_t), job_recycle);
     if (!downstream)
         pool_stats.connected_miners++;
     if (upstream_event)
