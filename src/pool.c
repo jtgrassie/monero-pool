@@ -275,7 +275,7 @@ static unsigned clients_reading;
 static pthread_cond_t cond_clients = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mutex_clients = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutex_log = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t mutex_tx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t rwlock_tx = PTHREAD_RWLOCK_INITIALIZER;
 static FILE *fd_log;
 static unsigned char sec_view[32];
 static unsigned char pub_spend[32];
@@ -390,7 +390,7 @@ database_resize(void)
 
     if(ei.me_mapsize < DB_INIT_SIZE)
     {
-        if ((rc = pthread_mutex_trylock(&mutex_tx)))
+        if ((rc = pthread_rwlock_trywrlock(&rwlock_tx)))
         {
             log_warn("Cannot cannot acquire lock");
             return rc;
@@ -412,7 +412,7 @@ database_resize(void)
     if ((double)used / ei.me_mapsize > threshold)
     {
         uint64_t ns = (uint64_t) ei.me_mapsize + DB_GROW_SIZE;
-        if ((rc = pthread_mutex_trylock(&mutex_tx)))
+        if ((rc = pthread_rwlock_trywrlock(&rwlock_tx)))
         {
             log_warn("Cannot cannot acquire lock");
             return rc;
@@ -428,7 +428,7 @@ database_resize(void)
     }
     return 0;
 unlock:
-    pthread_mutex_unlock(&mutex_tx);
+    pthread_rwlock_unlock(&rwlock_tx);
     return rc;
 }
 
@@ -636,7 +636,7 @@ miner_balance(const char *address)
     if (strlen(address) > ADDRESS_MAX)
         return balance;
 
-    pthread_mutex_trylock(&mutex_tx);
+    pthread_rwlock_rdlock(&rwlock_tx);
 
     if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)) != 0)
     {
@@ -668,7 +668,7 @@ miner_balance(const char *address)
     balance = *(uint64_t*)val.mv_data;
 
 cleanup:
-    pthread_mutex_unlock(&mutex_tx);
+    pthread_rwlock_unlock(&rwlock_tx);
     if (cursor)
         mdb_cursor_close(cursor);
     if (txn)
@@ -3984,7 +3984,7 @@ cleanup(void)
     rx_slow_hash_free_state();
     pthread_mutex_destroy(&mutex_clients);
     pthread_mutex_destroy(&mutex_log);
-    pthread_mutex_destroy(&mutex_tx);
+    pthread_rwlock_destroy(&rwlock_tx);
     pthread_cond_destroy(&cond_clients);
     log_info("Pool shutdown successfully");
     if (fd_log)
