@@ -1953,7 +1953,18 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
             continue;
         }
         uint64_t current_amount = *(uint64_t*)val.mv_data;
-        current_amount -= payment->amount;
+
+        if (current_amount >= payment->amount)
+        {
+            current_amount -= payment->amount;
+        }
+        else
+        {
+            log_error("Payment was more than balance: %"PRIu64" > %"PRIu64,
+                      payment->amount, current_amount);
+            current_amount = 0;
+        }
+
         if (error)
         {
             log_warn("Error seen on transfer for %s with amount %"PRIu64,
