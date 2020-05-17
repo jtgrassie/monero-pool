@@ -164,6 +164,9 @@ typedef struct config_t
     char upstream_host[MAX_HOST];
     uint16_t upstream_port;
     char pool_view_key[64];
+    bool check_hash;
+    bool miner_payments;
+
 } config_t;
 
 typedef struct block_template_t
@@ -3054,33 +3057,40 @@ miner_on_submit(json_object *message, client_t *client)
     /* Hash and compare */
     unsigned char result_hash[32] = {0};
     unsigned char submitted_hash[32] = {0};
-    uint8_t major_version = (uint8_t)block[0];
-    uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
-    if (pow_variant >= 6)
-    {
-        unsigned char seed_hash[32] = {0};
-        hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
-        get_rx_hash(hashing_blob, hashing_blob_size,
-                (unsigned char*)result_hash, seed_hash, bt->height);
-    }
-    else
-    {
-        get_hash(hashing_blob, hashing_blob_size,
-                (unsigned char*)result_hash, pow_variant, bt->height);
-    }
+    
     hex_to_bin(result_hex, 64, submitted_hash, 32);
-
-    if (memcmp(submitted_hash, result_hash, 32) != 0)
+    
+    /* Disable hash checking (unsupported CPUs) */
+    if (config.check_hash)
     {
-        char body[ERROR_BODY_MAX] = {0};
-        stratum_get_error_body(body, client->json_id, "Invalid share");
-        evbuffer_add(output, body, strlen(body));
-        log_debug("Invalid share");
-        client->bad_shares++;
-        free(block);
-        free(hashing_blob);
-        return;
-    }
+        uint8_t major_version = (uint8_t)block[0];
+        uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
+        if (pow_variant >= 6)
+        {
+            unsigned char seed_hash[32] = {0};
+            hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
+            get_rx_hash(hashing_blob, hashing_blob_size,
+                    (unsigned char*)result_hash, seed_hash, bt->height);
+        }
+        else
+        {
+            get_hash(hashing_blob, hashing_blob_size,
+                    (unsigned char*)result_hash, pow_variant, bt->height);
+        }
+
+        if (memcmp(submitted_hash, result_hash, 32) != 0)
+        {
+            char body[ERROR_BODY_MAX] = {0};
+            stratum_get_error_body(body, client->json_id, "Invalid share");
+            evbuffer_add(output, body, strlen(body));
+            log_debug("Invalid share");
+            client->bad_shares++;
+            free(block);
+            free(hashing_blob);
+            return;
+        }
+        
+    }else memcpy(result_hash, submitted_hash, 32);
 
     BIGNUM *hd = BN_new();
     BIGNUM *jd = BN_new();
@@ -3096,10 +3106,10 @@ miner_on_submit(json_object *message, client_t *client)
     /* Process share */
     client->hashes += job->target;
     time_t now = time(NULL);
-    bool can_store = true;
+    bool can_store = true;  
     log_trace("Checking hash against block difficulty: "
-            "%lu, job difficulty: %lu",
-            BN_get_word(bd), BN_get_word(jd));
+            "%lu, hash difficulty: %lu, job difficulty: %lu",
+            BN_get_word(bd), BN_get_word(hd), BN_get_word(jd));
 
     if (BN_cmp(hd, bd) >= 0)
     {
@@ -3658,6 +3668,15 @@ read_config(const char *config_file)
         {
             memcpy(config.pool_view_key, val, 64);
         }
+        else if (strcmp(key, "check-hash") == 0)
+        {
+            config.check_hash = atoi(val);
+        }
+        else if (strcmp(key, "miner-payments") == 0)
+        {
+            config.miner_payments = atoi(val);
+        }
+  
     }
     fclose(fp);
 
@@ -3746,7 +3765,9 @@ static void print_config()
         "  trusted-port = %u\n"
         "  trusted-allowed = %s\n"
         "  upstream-host = %s\n"
-        "  upstream-port = %u\n",
+        "  upstream-port = %u\n"
+        "  check-hash = %u\n"
+        "  miner-payments = %u\n",
         config.pool_listen,
         config.pool_port,
         config.pool_ssl_port,
@@ -3774,7 +3795,9 @@ static void print_config()
         config.trusted_port,
         display_allowed,
         config.upstream_host,
-        config.upstream_port);
+        config.upstream_port,
+        config.check_hash,
+        config.miner_payments);
 }
 
 static void
@@ -3940,9 +3963,16 @@ run(void)
     }
     else
         fetch_last_block_header();
+        
     fetch_view_key();
-    timer_10m = evtimer_new(pool_base, timer_on_10m, NULL);
-    timer_on_10m(-1, EV_TIMEOUT, NULL);
+    
+    /* Disable miner payments (own pool) */
+    if (config.miner_payments)
+    {
+        timer_10m = evtimer_new(pool_base, timer_on_10m, NULL);
+        timer_on_10m(-1, EV_TIMEOUT, NULL);
+    }
+        
     if (*config.upstream_host)
     {
         timer_10s = evtimer_new(pool_base, timer_on_10s, NULL);
