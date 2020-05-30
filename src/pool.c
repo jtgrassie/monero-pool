@@ -287,6 +287,7 @@ static struct bufferevent *upstream_event;
 static struct event *timer_10s;
 static time_t upstream_last_time;
 static uint64_t upstream_last_height;
+static uint32_t miner_count;
 
 #ifdef HAVE_RX
 extern void rx_stop_mining();
@@ -2576,6 +2577,12 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
     {
         log_debug("Upstream timeout");
     }
+    /* Update stats due to upstream disconnect */
+    if (pool_stats.connected_miners != miner_count)
+    {
+        pool_stats.connected_miners = miner_count;
+        update_pool_hr();
+    }
     /* Wait and try to reconnect */
     if (upstream_event)
     {
@@ -2690,6 +2697,7 @@ client_add(int fd, struct bufferevent *bev, bool downstream)
     c->connected_since = time(NULL);
     c->downstream = downstream;
     bstack_new(&c->active_jobs, CLIENT_JOBS_MAX, sizeof(job_t), job_recycle);
+    miner_count++;
     if (!downstream)
         pool_stats.connected_miners++;
     if (upstream_event)
@@ -2733,6 +2741,7 @@ client_clear(struct bufferevent *bev)
     bufferevent_free(bev);
     if (upstream_event)
         upstream_send_client_disconnect();
+    miner_count--;
 }
 
 static void
