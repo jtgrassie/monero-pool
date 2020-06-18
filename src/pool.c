@@ -935,6 +935,8 @@ update_pool_hr(void)
         }
     }
     log_debug("Pool hashrate: %"PRIu64, hr);
+    if (upstream_event)
+        return;
     pool_stats.pool_hashrate = hr;
 }
 
