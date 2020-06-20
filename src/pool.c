@@ -155,6 +155,7 @@ typedef struct config_t
     char log_file[MAX_PATH];
     bool block_notified;
     bool disable_self_select;
+    bool disable_hash_check;
     char data_dir[MAX_PATH];
     char pid_file[MAX_PATH];
     bool forked;
@@ -3067,6 +3068,18 @@ miner_on_submit(json_object *message, client_t *client)
     unsigned char submitted_hash[32] = {0};
     uint8_t major_version = (uint8_t)block[0];
     uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
+    BIGNUM *hd = BN_new();
+    BIGNUM *jd = BN_new();
+    BIGNUM *bd = BN_new();
+    BIGNUM *rh = NULL;
+    hex_to_bin(result_hex, 64, submitted_hash, 32);
+
+    if (config.disable_hash_check)
+    {
+        memcpy(result_hash, submitted_hash, 32);
+        goto post_hash;
+    }
+
     if (pow_variant >= 6)
     {
         unsigned char seed_hash[32] = {0};
@@ -3079,7 +3092,6 @@ miner_on_submit(json_object *message, client_t *client)
         get_hash(hashing_blob, hashing_blob_size,
                 (unsigned char*)result_hash, pow_variant, bt->height);
     }
-    hex_to_bin(result_hex, 64, submitted_hash, 32);
 
     if (memcmp(submitted_hash, result_hash, 32) != 0)
     {
@@ -3093,10 +3105,7 @@ miner_on_submit(json_object *message, client_t *client)
         return;
     }
 
-    BIGNUM *hd = BN_new();
-    BIGNUM *jd = BN_new();
-    BIGNUM *bd = BN_new();
-    BIGNUM *rh = NULL;
+post_hash:
     BN_set_word(jd, job->target);
     BN_set_word(bd, bt->difficulty);
     reverse_bin(result_hash, 32);
@@ -3490,6 +3499,7 @@ read_config(const char *config_file)
     config.webui_port = 4243;
     config.block_notified = false;
     config.disable_self_select = false;
+    config.disable_hash_check = false;
     strcpy(config.data_dir, "./data");
 
     char path[MAX_PATH] = {0};
@@ -3619,6 +3629,12 @@ read_config(const char *config_file)
         else if (strcmp(key, "disable-self-select") == 0)
         {
             config.disable_self_select = atoi(val);
+        }
+        else if (strcmp(key, "disable-hash-check") == 0)
+        {
+            config.disable_hash_check = atoi(val);
+            if (config.disable_hash_check)
+                log_warn("Share hash checking disabled");
         }
         else if (strcmp(key, "data-dir") == 0)
         {
@@ -3750,6 +3766,7 @@ static void print_config()
         "  log-file = %s\n"
         "  block-notified = %u\n"
         "  disable-self-select = %u\n"
+        "  disable-hash-check = %u\n"
         "  data-dir = %s\n"
         "  pid-file = %s\n"
         "  forked = %u\n"
@@ -3778,6 +3795,7 @@ static void print_config()
         config.log_file,
         config.block_notified,
         config.disable_self_select,
+        config.disable_hash_check,
         config.data_dir,
         config.pid_file,
         config.forked,
