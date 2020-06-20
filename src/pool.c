@@ -142,6 +142,7 @@ typedef struct config_t
     uint16_t wallet_rpc_port;
     char pool_wallet[ADDRESS_MAX];
     uint64_t pool_start_diff;
+    uint64_t pool_fixed_diff;
     double share_mul;
     uint32_t retarget_time;
     double retarget_ratio;
@@ -991,6 +992,8 @@ static uint64_t
 client_target(client_t *client, job_t *job)
 {
     uint64_t bd = 0xFFFFFFFFFFFFFFFF;
+    if (config.pool_fixed_diff)
+        return config.pool_fixed_diff;
     if (job->block_template)
         bd = job->block_template->difficulty;
     double duration = difftime(time(NULL), client->connected_since);
@@ -1003,6 +1006,8 @@ client_target(client_t *client, job_t *job)
 static bool
 retarget_required(client_t *client, job_t *job)
 {
+    if (config.pool_fixed_diff)
+        return false;
     return ((double)job->target / client_target(client, job)
             < config.retarget_ratio);
 }
@@ -3594,6 +3599,10 @@ read_config(const char *config_file)
         {
             config.pool_start_diff = strtoumax(val, NULL, 10);
         }
+        else if (strcmp(key, "pool-fixed-diff") == 0)
+        {
+            config.pool_fixed_diff = strtoumax(val, NULL, 10);
+        }
         else if (strcmp(key, "pool-fee") == 0)
         {
             config.pool_fee = atof(val);
@@ -3757,6 +3766,7 @@ static void print_config()
         "  rpc-timeout = %u\n"
         "  pool-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
+        "  pool-fixed-diff = %"PRIu64"\n"
         "  pool-fee = %.3f\n"
         "  payment-threshold = %.2f\n"
         "  share-mul = %.2f\n"
@@ -3786,6 +3796,7 @@ static void print_config()
         config.rpc_timeout,
         config.pool_wallet,
         config.pool_start_diff,
+        config.pool_fixed_diff,
         config.pool_fee,
         config.payment_threshold,
         config.share_mul,
