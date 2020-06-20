@@ -157,6 +157,7 @@ typedef struct config_t
     bool block_notified;
     bool disable_self_select;
     bool disable_hash_check;
+    bool disable_payouts;
     char data_dir[MAX_PATH];
     char pid_file[MAX_PATH];
     bool forked;
@@ -2038,7 +2039,7 @@ cleanup:
 static int
 send_payments(void)
 {
-    if (*config.upstream_host)
+    if (*config.upstream_host || config.disable_payouts)
         return 0;
     uint64_t threshold = 1000000000000 * config.payment_threshold;
     int rc;
@@ -3508,6 +3509,7 @@ read_config(const char *config_file)
     config.block_notified = false;
     config.disable_self_select = false;
     config.disable_hash_check = false;
+    config.disable_payouts = false;
     strcpy(config.data_dir, "./data");
 
     char path[MAX_PATH] = {0};
@@ -3648,6 +3650,10 @@ read_config(const char *config_file)
             if (config.disable_hash_check)
                 log_warn("Share hash checking disabled");
         }
+        else if (strcmp(key, "disable-payouts") == 0)
+        {
+            config.disable_payouts = atoi(val);
+        }
         else if (strcmp(key, "data-dir") == 0)
         {
             strncpy(config.data_dir, val, sizeof(config.data_dir)-1);
@@ -3780,6 +3786,7 @@ static void print_config()
         "  block-notified = %u\n"
         "  disable-self-select = %u\n"
         "  disable-hash-check = %u\n"
+        "  disable-payouts = %u\n"
         "  data-dir = %s\n"
         "  pid-file = %s\n"
         "  forked = %u\n"
@@ -3810,6 +3817,7 @@ static void print_config()
         config.block_notified,
         config.disable_self_select,
         config.disable_hash_check,
+        config.disable_payouts,
         config.data_dir,
         config.pid_file,
         config.forked,
