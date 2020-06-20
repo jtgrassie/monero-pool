@@ -3045,9 +3045,12 @@ miner_on_submit(json_object *message, client_t *client)
             return;
         }
     }
-    job->submissions = realloc((void*)submissions,
-            sizeof(uint128_t) * ++job->submissions_count);
-    job->submissions[job->submissions_count-1] = sub;
+    if (!fmod(job->submissions_count, 10))
+    {
+        job->submissions = realloc((void*)submissions,
+                10*sizeof(uint128_t)+job->submissions_count*sizeof(uint128_t));
+    }
+    job->submissions[job->submissions_count++] = sub;
 
     /* And the supplied nonce */
     p = block;
