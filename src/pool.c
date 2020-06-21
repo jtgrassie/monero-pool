@@ -3087,9 +3087,9 @@ miner_on_submit(json_object *message, client_t *client)
     unsigned char submitted_hash[32] = {0};
     uint8_t major_version = (uint8_t)block[0];
     uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
-    BIGNUM *hd = BN_new();
-    BIGNUM *jd = BN_new();
-    BIGNUM *bd = BN_new();
+    BIGNUM *hd = NULL;
+    BIGNUM *jd = NULL;
+    BIGNUM *bd = NULL;
     BIGNUM *rh = NULL;
     hex_to_bin(result_hex, 64, submitted_hash, 32);
 
@@ -3125,6 +3125,9 @@ miner_on_submit(json_object *message, client_t *client)
     }
 
 post_hash:
+    hd = BN_new();
+    jd = BN_new();
+    bd = BN_new();
     BN_set_word(jd, job->target);
     BN_set_word(bd, bt->difficulty);
     reverse_bin(result_hash, 32);
