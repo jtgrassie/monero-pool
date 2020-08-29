@@ -138,6 +138,7 @@ typedef struct config_t
     char rpc_host[MAX_HOST];
     uint16_t rpc_port;
     uint32_t rpc_timeout;
+    uint32_t idle_timeout;
     char wallet_rpc_host[MAX_HOST];
     uint16_t wallet_rpc_port;
     char pool_wallet[ADDRESS_MAX];
@@ -3482,6 +3483,8 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
     struct bufferevent *bev;
     evutil_make_socket_nonblocking(fd);
     bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+    struct timeval tv = {config.idle_timeout, 0};
+    bufferevent_set_timeouts(bev, &tv, &tv);
     bufferevent_setcb(bev, 
             base == trusted_base ? trusted_on_read : miner_on_read,
             NULL, listener_on_error, arg);
@@ -3508,6 +3511,7 @@ read_config(const char *config_file)
     strcpy(config.rpc_host, "127.0.0.1");
     config.rpc_port = 18081;
     config.rpc_timeout = 15;
+    config.idle_timeout = BLOCK_TIME;
     config.pool_start_diff = 100;
     config.share_mul = 2.0;
     config.retarget_time = 120;
@@ -3608,6 +3612,10 @@ read_config(const char *config_file)
         else if (strcmp(key, "rpc-timeout") == 0)
         {
             config.rpc_timeout = atoi(val);
+        }
+        else if (strcmp(key, "idle-timeout") == 0)
+        {
+            config.idle_timeout = atoi(val);
         }
         else if (strcmp(key, "pool-wallet") == 0)
         {
@@ -3803,6 +3811,7 @@ static void print_config()
         "  wallet-rpc-host = %s\n"
         "  wallet-rpc-port = %u\n"
         "  rpc-timeout = %u\n"
+        "  idle-timeout = %u\n"
         "  pool-wallet = %s\n"
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
@@ -3835,6 +3844,7 @@ static void print_config()
         config.wallet_rpc_host,
         config.wallet_rpc_port,
         config.rpc_timeout,
+        config.idle_timeout,
         config.pool_wallet,
         config.pool_fee_wallet,
         config.pool_start_diff,
