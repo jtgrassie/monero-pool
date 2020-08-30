@@ -3484,7 +3484,8 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
     evutil_make_socket_nonblocking(fd);
     bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     struct timeval tv = {config.idle_timeout, 0};
-    bufferevent_set_timeouts(bev, &tv, &tv);
+    if (base != trusted_base)
+        bufferevent_set_timeouts(bev, &tv, &tv);
     bufferevent_setcb(bev, 
             base == trusted_base ? trusted_on_read : miner_on_read,
             NULL, listener_on_error, arg);
