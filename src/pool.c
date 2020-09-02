@@ -314,7 +314,7 @@ static struct bufferevent *upstream_event;
 static struct event *timer_10s;
 static time_t upstream_last_time;
 static uint64_t upstream_last_height;
-static uint32_t miner_count;
+static uint32_t account_count;
 static client_t *clients_by_fd = NULL;
 static account_t *accounts = NULL;
 static gbag_t *bag_accounts;
@@ -2668,9 +2668,9 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
         log_debug("Upstream timeout");
     }
     /* Update stats due to upstream disconnect */
-    if (pool_stats.connected_accounts != miner_count)
+    if (pool_stats.connected_accounts != account_count)
     {
-        pool_stats.connected_accounts = miner_count;
+        pool_stats.connected_accounts = account_count;
         update_pool_hr();
     }
     /* Wait and try to reconnect */
@@ -2798,34 +2798,39 @@ static void
 client_clear(struct bufferevent *bev)
 {
     client_t *client = NULL;
+    account_t *account = NULL;
     client_find(bev, &client);
     if (!client)
         return;
-    client_clear_jobs(client);
-    account_t *account = NULL;
+    if (client->downstream)
+    {
+        pool_stats.connected_accounts -= client->downstream_accounts;
+        goto clear;
+    }
     pthread_rwlock_rdlock(&rwlock_acc);
     HASH_FIND_STR(accounts, client->address, account);
     pthread_rwlock_unlock(&rwlock_acc);
-    if (account && account->worker_count == 1)
+    if (!account)
+        goto clear;
+    if (account->worker_count == 1)
     {
-        if (client->downstream)
-            pool_stats.connected_accounts -= client->downstream_accounts;
-        else
-            pool_stats.connected_accounts--;
+        account_count--;
+        pool_stats.connected_accounts--;
         if (upstream_event)
             upstream_send_account_disconnect();
-        miner_count--;
         pthread_rwlock_wrlock(&rwlock_acc);
         HASH_DEL(accounts, account);
         pthread_rwlock_unlock(&rwlock_acc);
         gbag_put(bag_accounts, account);
     }
-    else if (account && account->worker_count > 1)
+    else if (account->worker_count > 1)
         account->worker_count--;
+clear:
+    client_clear_jobs(client);
     pthread_rwlock_wrlock(&rwlock_cfd);
     HASH_DEL(clients_by_fd, client);
     pthread_rwlock_unlock(&rwlock_cfd);
-    memset(client, 0, sizeof(client_t));
+    gbag_put(bag_clients, client);
     bufferevent_free(bev);
 }
 
@@ -2896,13 +2901,14 @@ miner_on_login(json_object *message, client_t *client)
 
     strncpy(client->address, address, sizeof(client->address)-1);
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id)-1);
+
     account_t *account = NULL;
     pthread_rwlock_rdlock(&rwlock_acc);
     HASH_FIND_STR(accounts, client->address, account);
     pthread_rwlock_unlock(&rwlock_acc);
     if (!account)
     {
-        miner_count++;
+        account_count++;
         if (!client->downstream)
             pool_stats.connected_accounts++;
         if (upstream_event)
@@ -2918,6 +2924,7 @@ miner_on_login(json_object *message, client_t *client)
     }
     else
         account->worker_count++;
+
     uuid_t cid;
     uuid_generate(cid);
     bin_to_hex((const unsigned char*)cid, sizeof(uuid_t),
