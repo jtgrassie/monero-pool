@@ -45,6 +45,7 @@ developers.
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/http.h>
+#include <event2/listener.h>
 
 #include "log.h"
 #include "pool.h"
@@ -148,8 +149,25 @@ static void *
 thread_main(void *ctx)
 {
     wui_context_t *context = (wui_context_t*) ctx;
-    webui_listener = evhttp_bind_socket_with_handle(
-            webui_httpd, context->pool_listen, context->port);
+    struct evconnlistener *lev = NULL;
+    struct addrinfo *info = NULL;
+    int rc;
+    char port[6] = {0};
+    sprintf(port, "%d", context->port);
+    if ((rc = getaddrinfo(context->pool_listen, port, 0, &info)))
+    {
+        log_error("Error parsing listen address: %s", gai_strerror(rc));
+        return 0;
+    }
+    lev = evconnlistener_new_bind(webui_base, 0, NULL,
+            LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE | LEV_OPT_REUSEABLE_PORT,
+            -1, (struct sockaddr*)info->ai_addr, info->ai_addrlen);
+    if (!lev)
+    {
+        log_error("%s", strerror(errno));
+        return 0;
+    }
+    webui_listener = evhttp_bind_listener(webui_httpd, lev);
     if(!webui_listener)
     {
         log_error("Failed to bind for port: %u", context->port);
