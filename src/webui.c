@@ -75,7 +75,7 @@ send_json_stats(struct evhttp_request *req, void *arg)
     uint32_t pbf = context->pool_stats->pool_blocks_found;
     uint64_t rh = context->pool_stats->round_hashes;
     unsigned ss = context->allow_self_select;
-    uint64_t mh = 0;
+    double mh[6] = {0};
     double mb = 0.0;
 
     hdrs_in = evhttp_request_get_input_headers(req);
@@ -86,8 +86,8 @@ send_json_stats(struct evhttp_request *req, void *arg)
         if (wa)
         {
             wa += 3;
-            mh = miner_hr(wa);
-            uint64_t balance = miner_balance(wa);
+            account_hr(mh, wa);
+            uint64_t balance = account_balance(wa);
             mb = (double) balance / 1000000000000.0;
         }
     }
@@ -108,12 +108,17 @@ send_json_stats(struct evhttp_request *req, void *arg)
             "\"allow_self_select\":%u,"
             "\"connected_miners\":%d,"
             "\"miner_hashrate\":%"PRIu64","
+            "\"miner_hashrate_stats\":["
+                    "%"PRIu64",%"PRIu64",%"PRIu64","
+                    "%"PRIu64",%"PRIu64",%"PRIu64"],"
             "\"miner_balance\":%.8f"
             "}", ph, rh, nh, nd, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
             context->pool_port, context->pool_ssl_port,
-            ss, context->pool_stats->connected_miners,
-            mh, mb);
+            ss, context->pool_stats->connected_accounts,
+            (uint64_t)mh[0],
+            (uint64_t)mh[0], (uint64_t)mh[1], (uint64_t)mh[2],
+            (uint64_t)mh[3], (uint64_t)mh[4], (uint64_t)mh[5], mb);
     hdrs_out = evhttp_request_get_output_headers(req);
     evhttp_add_header(hdrs_out, "Content-Type", "application/json");
     evhttp_send_reply(req, HTTP_OK, "OK", buf);

@@ -135,6 +135,17 @@ enum msgbin_type  { BIN_PING, BIN_CONNECT, BIN_DISCONNECT, BIN_SHARE,
                     BIN_BLOCK, BIN_STATS, BIN_BALANCE };
 const unsigned char msgbin[] = {0x4D,0x4E,0x52,0x4F,0x50,0x4F,0x4F,0x4C};
 
+/* 2m, 10m, 30m, 1h, 1d, 1w */
+const unsigned hr_intervals[] = {120,600,1800,3600,86400,604800};
+
+typedef struct hr_stats_t
+{
+    time_t last_calc;
+    uint64_t diff_since;
+    /* 2m, 10m, 30m, 1h, 1d, 1w */
+    double avg[6];
+} hr_stats_t;
+
 typedef struct config_t
 {
     char rpc_host[MAX_HOST];
@@ -208,23 +219,25 @@ typedef struct client_t
     char agent[256];
     bstack_t *active_jobs;
     uint64_t hashes;
+    hr_stats_t hr_stats;
     time_t connected_since;
     bool is_xnp;
     uint32_t mode;
     uint8_t bad_shares;
     bool downstream;
-    uint32_t downstream_miners;
+    uint32_t downstream_accounts;
     UT_hash_handle hh;
 } client_t;
 
-typedef struct account_stats_t
+typedef struct account_t
 {
     char address[ADDRESS_MAX];
     size_t worker_count;
     time_t connected_since;
     uint64_t hashes;
+    hr_stats_t hr_stats;
     UT_hash_handle hh;
-} account_stats_t;
+} account_t;
 
 typedef struct share_t
 {
@@ -303,8 +316,8 @@ static time_t upstream_last_time;
 static uint64_t upstream_last_height;
 static uint32_t miner_count;
 static client_t *clients_by_fd = NULL;
-static account_stats_t *account_stats = NULL;
-static gbag_t *bag_stats;
+static account_t *accounts = NULL;
+static gbag_t *bag_accounts;
 static gbag_t *bag_clients;
 
 #ifdef HAVE_RX
@@ -335,6 +348,37 @@ void rx_slow_hash_free_state(){}
             log_warn(#name " not a " #type);                         \
         }                                                            \
     }
+
+static void
+hr_update(hr_stats_t *stats)
+{
+    /*
+       Update some time decayed EMA hashrates.
+    */
+    time_t now = time(NULL);
+    double t = difftime(now, stats->last_calc);
+    if (t <= 0)
+        return;
+    double h = stats->diff_since;
+    double d, p, z;
+    unsigned i = sizeof(hr_intervals)/sizeof(hr_intervals[0]);
+    while (i--)
+    {
+        unsigned inter = hr_intervals[i];
+        double *f = &stats->avg[i];
+        d = t/inter;
+        if (d > 32)
+            d = 32;
+        p = 1 - 1.0 / exp(d);
+        z = 1 + p;
+        *f += (h / t * p);
+        *f /= z;
+        if (*f < 2e-16)
+            *f = 0;
+    }
+    stats->diff_since = 0;
+    stats->last_calc = now;
+}
 
 static inline rpc_callback_t *
 rpc_callback_new(rpc_callback_fun cf, void *data, rpc_datafree_fun df)
@@ -628,27 +672,21 @@ store_block(uint64_t height, block_t *block)
     return rc;
 }
 
-uint64_t
-miner_hr(const char *address)
+void
+account_hr(double *avg, const char *address)
 {
-    uint64_t hr = 0;
-    double d = 0.0;
-    account_stats_t *stats = NULL;
+    account_t *account = NULL;
     pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(account_stats, address, stats);
-    if (!stats || !stats->connected_since || !stats->hashes)
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
         goto bail;
-    d = difftime(time(NULL), stats->connected_since);
-    if (d == 0.0)
-        goto bail;
-    hr = stats->hashes / d;
+    memcpy(avg, account->hr_stats.avg, sizeof(account->hr_stats.avg));
 bail:
     pthread_rwlock_unlock(&rwlock_acc);
-    return hr;
 }
 
 uint64_t
-miner_balance(const char *address)
+account_balance(const char *address)
 {
     int rc;
     char *err;
@@ -954,14 +992,9 @@ static void
 update_pool_hr(void)
 {
     uint64_t hr = 0;
-    client_t *c = (client_t*) gbag_first(bag_clients);
-    while ((c = gbag_next(bag_clients,NULL)))
-    {
-        double d = difftime(time(NULL), c->connected_since);
-        if (d == 0.0)
-            continue;
-        hr += c->hashes / d;
-    }
+    client_t *c = (client_t*)gbag_first(bag_clients);
+    while ((c = gbag_next(bag_clients, 0)))
+        hr += (uint64_t) c->hr_stats.avg[0];
     log_debug("Pool hashrate: %"PRIu64, hr);
     if (upstream_event)
         return;
@@ -1358,14 +1391,14 @@ miner_send_job(client_t *client, bool response)
 }
 
 static void
-account_stats_moved(const void *items, size_t count)
+accounts_moved(const void *items, size_t count)
 {
-    account_stats_t *s, *e, *r;
-    s = (account_stats_t*) items;
+    account_t *s, *e, *r;
+    s = (account_t*) items;
     e = s + count;
     pthread_rwlock_wrlock(&rwlock_acc);
     while (s<e)
-        HASH_REPLACE_STR(account_stats, address, s, r);
+        HASH_REPLACE_STR(accounts, address, s, r);
     pthread_rwlock_unlock(&rwlock_acc);
 }
 
@@ -1385,7 +1418,7 @@ static void
 clients_send_job(void)
 {
     client_t *c = (client_t*) gbag_first(bag_clients);
-    while ((c = gbag_next(bag_clients,NULL)))
+    while ((c = gbag_next(bag_clients, 0)))
     {
         if (c->fd == 0 || c->address[0] == 0 || c->downstream)
             continue;
@@ -1396,8 +1429,8 @@ clients_send_job(void)
 static void
 clients_init(void)
 {
-    gbag_new(&bag_stats, CLIENTS_INIT, sizeof(account_stats_t), 0,
-            account_stats_moved);
+    gbag_new(&bag_accounts, CLIENTS_INIT, sizeof(account_t), 0,
+            accounts_moved);
     gbag_new(&bag_clients, CLIENTS_INIT, sizeof(client_t), 0,
             clients_moved);
 }
@@ -1405,11 +1438,11 @@ clients_init(void)
 static void
 clients_free(void)
 {
-    if (!(bag_stats && bag_clients))
+    if (!(bag_accounts && bag_clients))
         return;
 
     client_t *c = (client_t*) gbag_first(bag_clients);
-    while ((c = gbag_next(bag_clients,NULL)))
+    while ((c = gbag_next(bag_clients, 0)))
     {
         if (!c->active_jobs)
             continue;
@@ -1421,8 +1454,8 @@ clients_free(void)
     pthread_rwlock_unlock(&rwlock_cfd);
 
     pthread_rwlock_wrlock(&rwlock_acc);
-    HASH_CLEAR(hh, account_stats);
-    gbag_free(bag_stats);
+    HASH_CLEAR(hh, accounts);
+    gbag_free(bag_accounts);
     pthread_rwlock_unlock(&rwlock_acc);
 }
 
@@ -2119,7 +2152,7 @@ send_payments(void)
         return rc;
     }
 
-    gbag_t *bag_pay;
+    gbag_t *bag_pay = NULL;
     gbag_new(&bag_pay, 25, sizeof(payment_t), 0, 0);
 
     MDB_cursor_op op = MDB_FIRST;
@@ -2158,7 +2191,7 @@ send_payments(void)
                 "\"transfer_split\",\"params\":{"
                 "\"ring_size\":11,\"destinations\":[", end);
         payment_t *p = (payment_t*) gbag_first(bag_pay);
-        while ((p = gbag_next(bag_pay, NULL)))
+        while ((p = gbag_next(bag_pay, 0)))
         {
             start = stecpy(start, "{\"address\":\"", end);
             start = stecpy(start, p->address, end);
@@ -2274,7 +2307,7 @@ trusted_send_balance(client_t *client, const char *address)
     int t = BIN_BALANCE;
     memcpy(data, msgbin, 8);
     memcpy(data+8, &t, 1);
-    uint64_t balance = miner_balance(address);
+    uint64_t balance = account_balance(address);
     memcpy(data+9, &balance, sizeof(uint64_t));
     memcpy(data+9+sizeof(uint64_t), address, ADDRESS_MAX);
     evbuffer_add(output, data, z);
@@ -2293,7 +2326,7 @@ upstream_send_ping()
 }
 
 static void
-upstream_send_client_connect(uint32_t count)
+upstream_send_account_connect(uint32_t count)
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     size_t z = 9 + sizeof(uint32_t);
@@ -2303,11 +2336,11 @@ upstream_send_client_connect(uint32_t count)
     memcpy(data+8, &t, 1);
     memcpy(data+9, &count, z-9);
     evbuffer_add(output, data, z);
-    log_trace("Sending message connect upstream");
+    log_trace("Sending message account connect upstream");
 }
 
 static void
-upstream_send_client_disconnect()
+upstream_send_account_disconnect()
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     char data[9];
@@ -2447,37 +2480,37 @@ upstream_send_backlog()
     mdb_cursor_close(curshr);
     mdb_cursor_close(curblk);
     mdb_txn_abort(txn);
-    upstream_send_client_connect(pool_stats.connected_miners);
+    upstream_send_account_connect(pool_stats.connected_accounts);
 }
 
 static void
-trusted_on_client_connect(client_t *client)
+trusted_on_account_connect(client_t *client)
 {
     struct evbuffer *input = bufferevent_get_input(client->bev);
     uint32_t count;
     evbuffer_remove(input, &count, sizeof(uint32_t));
-    pool_stats.connected_miners += count;
-    client->downstream_miners += count;
-    log_trace("Downstream miner connected. "
-            "Miner count: %d, Pool hashrate: %"PRIu64,
-             pool_stats.connected_miners, pool_stats.pool_hashrate);
+    pool_stats.connected_accounts += count;
+    client->downstream_accounts += count;
+    log_trace("Downstream account connected. "
+            "Accounts: %d, Pool hashrate: %"PRIu64,
+             pool_stats.connected_accounts, pool_stats.pool_hashrate);
     trusted_send_stats(client);
     if (upstream_event)
-        upstream_send_client_connect(count);
+        upstream_send_account_connect(count);
 }
 
 static void
-trusted_on_client_disconnect(client_t *client)
+trusted_on_account_disconnect(client_t *client)
 {
-    pool_stats.connected_miners--;
-    if (client->downstream_miners)
-        client->downstream_miners--;
-    log_trace("Downstream miner disconnected. "
+    pool_stats.connected_accounts--;
+    if (client->downstream_accounts)
+        client->downstream_accounts--;
+    log_trace("Downstream account disconnected. "
             "Miner count: %d, Pool hashrate: %"PRIu64,
-             pool_stats.connected_miners, pool_stats.pool_hashrate);
+             pool_stats.connected_accounts, pool_stats.pool_hashrate);
     trusted_send_stats(client);
     if (upstream_event)
-        upstream_send_client_disconnect();
+        upstream_send_account_disconnect();
 }
 
 static void
@@ -2494,6 +2527,8 @@ trusted_on_client_share(client_t *client)
             s.difficulty);
     client->hashes += s.difficulty;
     pool_stats.round_hashes += s.difficulty;
+    client->hr_stats.diff_since += s.difficulty;
+    hr_update(&client->hr_stats);
     rc = store_share(s.height, &s);
     if (rc != 0)
         log_warn("Failed to store share: %s", mdb_strerror(rc));
@@ -2529,7 +2564,7 @@ upstream_on_stats(struct bufferevent *bev)
     evbuffer_remove(input, &pool_stats, sizeof(pool_stats_t));
     log_trace("Stats from upstream: "
             "%d, %"PRIu64", %"PRIu64", %d, %"PRIu64,
-            pool_stats.connected_miners,
+            pool_stats.connected_accounts,
             pool_stats.pool_hashrate,
             pool_stats.round_hashes,
             pool_stats.pool_blocks_found,
@@ -2633,9 +2668,9 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
         log_debug("Upstream timeout");
     }
     /* Update stats due to upstream disconnect */
-    if (pool_stats.connected_miners != miner_count)
+    if (pool_stats.connected_accounts != miner_count)
     {
-        pool_stats.connected_miners = miner_count;
+        pool_stats.connected_accounts = miner_count;
         update_pool_hr();
     }
     /* Wait and try to reconnect */
@@ -2767,26 +2802,26 @@ client_clear(struct bufferevent *bev)
     if (!client)
         return;
     client_clear_jobs(client);
-    account_stats_t *stats = NULL;
+    account_t *account = NULL;
     pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(account_stats, client->address, stats);
+    HASH_FIND_STR(accounts, client->address, account);
     pthread_rwlock_unlock(&rwlock_acc);
-    if (stats && stats->worker_count == 1)
+    if (account && account->worker_count == 1)
     {
         if (client->downstream)
-            pool_stats.connected_miners -= client->downstream_miners;
+            pool_stats.connected_accounts -= client->downstream_accounts;
         else
-            pool_stats.connected_miners--;
+            pool_stats.connected_accounts--;
         if (upstream_event)
-            upstream_send_client_disconnect();
+            upstream_send_account_disconnect();
         miner_count--;
         pthread_rwlock_wrlock(&rwlock_acc);
-        HASH_DEL(account_stats, stats);
+        HASH_DEL(accounts, account);
         pthread_rwlock_unlock(&rwlock_acc);
-        gbag_put(bag_stats, stats);
+        gbag_put(bag_accounts, account);
     }
-    else if (stats && stats->worker_count > 1)
-        stats->worker_count--;
+    else if (account && account->worker_count > 1)
+        account->worker_count--;
     pthread_rwlock_wrlock(&rwlock_cfd);
     HASH_DEL(clients_by_fd, client);
     pthread_rwlock_unlock(&rwlock_cfd);
@@ -2861,28 +2896,28 @@ miner_on_login(json_object *message, client_t *client)
 
     strncpy(client->address, address, sizeof(client->address)-1);
     strncpy(client->worker_id, worker_id, sizeof(client->worker_id)-1);
-    account_stats_t *stats = NULL;
+    account_t *account = NULL;
     pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(account_stats, client->address, stats);
+    HASH_FIND_STR(accounts, client->address, account);
     pthread_rwlock_unlock(&rwlock_acc);
-    if (!stats)
+    if (!account)
     {
         miner_count++;
         if (!client->downstream)
-            pool_stats.connected_miners++;
+            pool_stats.connected_accounts++;
         if (upstream_event)
-            upstream_send_client_connect(1);
-        stats = gbag_get(bag_stats);
-        strncpy(stats->address, address, sizeof(stats->address)-1);
-        stats->worker_count = 1;
-        stats->connected_since = time(NULL);
-        stats->hashes = 0;
+            upstream_send_account_connect(1);
+        account = gbag_get(bag_accounts);
+        strncpy(account->address, address, sizeof(account->address)-1);
+        account->worker_count = 1;
+        account->connected_since = time(NULL);
+        account->hashes = 0;
         pthread_rwlock_wrlock(&rwlock_acc);
-        HASH_ADD_STR(account_stats, address, stats);
+        HASH_ADD_STR(accounts, address, account);
         pthread_rwlock_unlock(&rwlock_acc);
     }
     else
-        stats->worker_count++;
+        account->worker_count++;
     uuid_t cid;
     uuid_generate(cid);
     bin_to_hex((const unsigned char*)cid, sizeof(uuid_t),
@@ -3189,12 +3224,17 @@ post_hash:
     BN_free(rh);
 
     /* Process share */
-    account_stats_t *stats = NULL;
+    account_t *account = NULL;
     pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(account_stats, client->address, stats);
-    pthread_rwlock_unlock(&rwlock_acc);
-    stats->hashes += job->target;
+    HASH_FIND_STR(accounts, client->address, account);
     client->hashes += job->target;
+    client->hr_stats.diff_since += job->target;
+    account->hashes += job->target;
+    account->hr_stats.diff_since += job->target;
+    hr_update(&client->hr_stats);
+    /* TODO: account hr should be called less freq */
+    hr_update(&account->hr_stats);
+    pthread_rwlock_unlock(&rwlock_acc);
     time_t now = time(NULL);
     bool can_store = true;
     log_trace("Checking hash against block difficulty: "
@@ -3442,11 +3482,11 @@ trusted_on_read(struct bufferevent *bev, void *ctx)
                 if (len - 9 < sizeof(uint32_t))
                     goto unlock;
                 evbuffer_drain(input, 9);
-                trusted_on_client_connect(client);
+                trusted_on_account_connect(client);
                 break;
             case BIN_DISCONNECT:
                 evbuffer_drain(input, 9);
-                trusted_on_client_disconnect(client);
+                trusted_on_account_disconnect(client);
                 break;
             case BIN_SHARE:
                 if (len - 9 < sizeof(share_t))
@@ -3549,7 +3589,7 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
     bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
     client_add(fd, bev, base == trusted_base);
     log_info("New %s connected. Miner count: %d, Pool hashrate: %"PRIu64,
-            type, pool_stats.connected_miners, pool_stats.pool_hashrate);
+            type, pool_stats.connected_accounts, pool_stats.pool_hashrate);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
 

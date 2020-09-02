@@ -40,7 +40,7 @@ typedef struct pool_stats_t
     uint64_t network_difficulty;
     uint64_t network_hashrate;
     uint64_t network_height;
-    uint32_t connected_miners;
+    uint32_t connected_accounts;
     uint64_t pool_hashrate;
     uint64_t round_hashes;
     uint32_t pool_blocks_found;

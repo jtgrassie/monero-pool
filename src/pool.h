@@ -35,7 +35,7 @@ developers.
 #ifndef POOL_H
 #define POOL_H
 
-uint64_t miner_hr(const char *address);
-uint64_t miner_balance(const char *address);
+void account_hr(double *avg, const char *address);
+uint64_t account_balance(const char *address);
 
 #endif
