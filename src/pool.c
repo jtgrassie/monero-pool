@@ -3609,10 +3609,10 @@ read_config(const char *config_file)
     strcpy(config.rpc_host, "127.0.0.1");
     config.rpc_port = 18081;
     config.rpc_timeout = 15;
-    config.idle_timeout = BLOCK_TIME;
-    config.pool_start_diff = 100;
+    config.idle_timeout = 150;
+    config.pool_start_diff = 1000;
     config.share_mul = 2.0;
-    config.retarget_time = 120;
+    config.retarget_time = 30;
     config.retarget_ratio = 0.55;
     config.pool_fee = 0.01;
     config.payment_threshold = 0.33;
