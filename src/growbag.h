@@ -32,35 +32,29 @@ Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
 developers.
 */
 
-#ifndef WEBUI_H
-#define WEBUI_H
+/* A bag of memory that exponentially grows */
 
-typedef struct pool_stats_t
-{
-    uint64_t network_difficulty;
-    uint64_t network_hashrate;
-    uint64_t network_height;
-    uint32_t connected_accounts;
-    uint64_t pool_hashrate;
-    uint64_t round_hashes;
-    uint32_t pool_blocks_found;
-    time_t last_block_found;
-    time_t last_template_fetched;
-} pool_stats_t;
+#ifndef GBAG_H
+#define GBAG_H
 
-typedef struct wui_context_t
-{
-    uint16_t port;
-    pool_stats_t *pool_stats;
-    double pool_fee;
-    double payment_threshold;
-    uint16_t pool_port;
-    char pool_listen[256];
-    uint16_t pool_ssl_port;
-    unsigned allow_self_select;
-} wui_context_t;
+#include <stddef.h>
 
-int start_web_ui(wui_context_t *context);
-void stop_web_ui(void);
+typedef struct gbag_t gbag_t;
+typedef void (*gbag_recycle)(void*);
+typedef void (*gbag_moved)(const void*,size_t);
+typedef int (*gbag_cmp)(const void*,const void*);
+
+void gbag_new(gbag_t **out, size_t count, size_t size,
+        gbag_recycle recycle, gbag_moved moved);
+void gbag_free(gbag_t *gb);
+
+void * gbag_get(gbag_t *gb);
+void gbag_put(gbag_t *gb, void *item);
+size_t gbag_max(gbag_t *gb);
+size_t gbag_used(gbag_t *gb);
+void * gbag_find(gbag_t *gb, const void *key, gbag_cmp cmp);
+void * gbag_find_after(gbag_t *gb, const void *key, gbag_cmp cmp, void* from);
+void * gbag_first(gbag_t *gb);
+void * gbag_next(gbag_t *gb, void* from);
 
 #endif

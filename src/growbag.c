@@ -1,0 +1,218 @@
+/*
+Copyright (c) 2014-2020, The Monero Project
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+may be used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
+developers.
+*/
+
+#include "growbag.h"
+#include <assert.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+struct gbag_t
+{
+    size_t z;
+    size_t max;
+    size_t ref;
+    char * b;
+    char * n;
+    char * ni;
+    gbag_recycle rc;
+    gbag_moved mv;
+};
+
+void
+gbag_new(gbag_t **out, size_t count, size_t size,
+        gbag_recycle recycle, gbag_moved moved)
+{
+    assert(*out==NULL && count && size);
+    gbag_t *gb = (gbag_t*) calloc(1, sizeof(gbag_t));
+    gb->z = size;
+    gb->max = count;
+    gb->ref = 0;
+    gb->b = (char*) calloc(gb->max, gb->z);
+    gb->n = gb->b;
+    gb->ni = gb->b;
+    gb->rc = recycle;
+    gb->mv = moved;
+    *out = gb;
+}
+
+void
+gbag_free(gbag_t *gb)
+{
+    assert(gb && gb->max && gb->b);
+    char *end = gb->b + (gb->max * gb->z);
+    char *cur = gb->b;
+    if (gb->rc)
+    {
+        while (cur < end)
+        {
+            gb->rc(cur);
+            cur += gb->z;
+        }
+    }
+    free(gb->b);
+    gb->max = 0;
+    gb->ref = 0;
+    gb->b = NULL;
+    gb->n = NULL;
+    gb->ni = NULL;
+    gb->rc = NULL;
+    gb->mv = NULL;
+}
+
+void *
+gbag_get(gbag_t *gb)
+{
+    assert(gb && gb->max && gb->b);
+    char *end = gb->b + (gb->max * gb->z);
+    char *from = gb->n;
+    size_t nm, cz;
+    char *b = NULL;
+    if (gb->ref == gb->max)
+        goto grow;
+scan:
+    do
+    {
+        if (!*gb->n)
+        {
+            gb->ref++;
+            return gb->n;
+        }
+        gb->n += gb->z;
+    }
+    while(gb->n < end);
+    if (from != gb->b)
+    {
+        end = from;
+        gb->n = gb->b;
+        from = gb->n;
+        goto scan;
+    }
+    else
+    {
+grow:
+        cz = gb->max * gb->z;
+        nm = gb->max << 1;
+        b = (char*) realloc(gb->b, nm * gb->z);
+        if (b == NULL)
+            return NULL;
+        memset(b + cz, 0, cz);
+        gb->max = nm;
+        if (gb->mv && gb->b != b)
+            gb->mv(b, cz);
+        gb->b = b;
+        gb->n = b + cz;
+        gb->ref++;
+        return gb->n;
+    }
+    return NULL;
+}
+
+void
+gbag_put(gbag_t *gb, void *item)
+{
+    assert(gb && item && gb->ref>0);
+    if (gb->rc)
+        gb->rc(item);
+    memset(item, 0, gb->z);
+    gb->n = (char*)item;
+    gb->ref--;
+}
+
+size_t
+gbag_max(gbag_t *gb)
+{
+    return gb->max;
+}
+
+size_t
+gbag_used(gbag_t *gb)
+{
+    return gb->ref;
+}
+
+void *
+gbag_find(gbag_t *gb, const void *key, gbag_cmp cmp)
+{
+    assert(gb && gb->b && gb->max);
+    return gbag_find_after(gb, key, cmp, NULL);
+}
+
+void *
+gbag_find_after(gbag_t *gb, const void *key, gbag_cmp cmp, void *from)
+{
+    assert(gb && gb->b && gb->max);
+    char *s = gb->b;
+    char *e = gb->b + (gb->max * gb->z);
+    if (from)
+        s = ((char*)from) + gb->z;
+    int c = (e-s)/gb->z;
+    return bsearch(key, s, c, gb->z, cmp);
+}
+
+void *
+gbag_first(gbag_t *gb)
+{
+    assert(gb && gb->b && gb->max);
+    char *s = gb->b;
+    char *e = gb->b + (gb->max * gb->z);
+    gb->ni = s;
+    do
+    {
+        if (*s)
+            return s;
+        s += gb->z;
+    }
+    while (s<e);
+    return NULL;
+}
+
+void *
+gbag_next(gbag_t *gb, void* from)
+{
+    assert(gb && gb->b && gb->max);
+    if (from)
+        gb->ni = ((char*)from) + gb->z;
+    char *e = gb->b + (gb->max * gb->z);
+    char *s = gb->ni;
+    while (s<e)
+    {
+        gb->ni += gb->z;
+        if (*s)
+            return s;
+        s += gb->z;
+    }
+    return NULL;
+}
+
