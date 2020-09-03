@@ -97,21 +97,23 @@ gbag_get(gbag_t *gb)
     assert(gb && gb->max && gb->b);
     char *end = gb->b + (gb->max * gb->z);
     char *from = gb->n;
-    size_t nm, cz;
+    size_t nc, oc, ocz;
     char *b = NULL;
+    char *rv = NULL;
     if (gb->ref == gb->max)
         goto grow;
 scan:
-    do
+    while(gb->n < end)
     {
         if (!*gb->n)
         {
             gb->ref++;
-            return gb->n;
+            rv = gb->n;
+            gb->n += gb->z;
+            return rv;
         }
         gb->n += gb->z;
     }
-    while(gb->n < end);
     if (from != gb->b)
     {
         end = from;
@@ -122,19 +124,21 @@ scan:
     else
     {
 grow:
-        cz = gb->max * gb->z;
-        nm = gb->max << 1;
-        b = (char*) realloc(gb->b, nm * gb->z);
-        if (b == NULL)
+        ocz = gb->max * gb->z;
+        oc = gb->max;
+        nc = gb->max << 1;
+        b = (char*) realloc(gb->b, nc * gb->z);
+        if (!b)
             return NULL;
-        memset(b + cz, 0, cz);
-        gb->max = nm;
+        rv = b + ocz;
+        memset(rv, 0, ocz);
         if (gb->mv && gb->b != b)
-            gb->mv(b, cz);
-        gb->b = b;
-        gb->n = b + cz;
+            gb->mv(b, oc);
+        gb->max = nc;
         gb->ref++;
-        return gb->n;
+        gb->b = b;
+        gb->n = rv + gb->z;
+        return rv;
     }
     return NULL;
 }
@@ -188,13 +192,13 @@ gbag_first(gbag_t *gb)
     char *s = gb->b;
     char *e = gb->b + (gb->max * gb->z);
     gb->ni = s;
-    do
+    while (s<e)
     {
         if (*s)
             return s;
         s += gb->z;
+        gb->ni = s;
     }
-    while (s<e);
     return NULL;
 }
 
