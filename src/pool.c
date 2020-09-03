@@ -2783,7 +2783,7 @@ client_add(int fd, struct sockaddr_storage *ss,
     c->connected_since = time(NULL);
     c->downstream = downstream;
     int rc = 0;
-    if ((rc = getnameinfo((struct sockaddr*)ss, sizeof(ss),
+    if ((rc = getnameinfo((struct sockaddr*)ss, sizeof(*ss),
                     c->host, MAX_HOST, NULL, 0, NI_NUMERICHOST)))
     {
         log_error("Error getting client address: %s",
