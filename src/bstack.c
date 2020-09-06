@@ -33,7 +33,6 @@ developers.
 */
 
 #include "bstack.h"
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -51,7 +50,6 @@ struct bstack_t
 void
 bstack_new(bstack_t **out, size_t count, size_t size, recycle_fun recycle)
 {
-    assert(*out==NULL);
     bstack_t *q = (bstack_t*) calloc(1, sizeof(bstack_t));
     q->c = count;
     q->cc = 0;
@@ -66,7 +64,6 @@ bstack_new(bstack_t **out, size_t count, size_t size, recycle_fun recycle)
 void
 bstack_free(bstack_t *q)
 {
-    assert(q);
     if (q->rf)
     {
         char *ps = q->b;
@@ -84,7 +81,6 @@ bstack_free(bstack_t *q)
 void *
 bstack_push(bstack_t *q, void *item)
 {
-    assert(q);
     size_t idx = q->n++ % q->c;
     void *pb = q->b + (idx * q->z);
     if (q->rf && q->cc == q->c)
@@ -102,7 +98,6 @@ bstack_push(bstack_t *q, void *item)
 void
 bstack_drop(bstack_t *q)
 {
-    assert(q);
     if (!q->cc)
         return;
     q->n--;
@@ -116,7 +111,6 @@ bstack_drop(bstack_t *q)
 void *
 bstack_top(bstack_t *q)
 {
-    assert(q);
     if (!q->cc)
         return NULL;
     size_t idx = (q->n - (q->cc + 1)) % q->c;
@@ -128,14 +122,12 @@ bstack_top(bstack_t *q)
 
 size_t bstack_count(bstack_t *q)
 {
-    assert(q);
     return q->cc;
 }
 
 void *
 bstack_next(bstack_t *q)
 {
-    assert(q);
     if (!q->ni)
         return NULL;
     q->ni--;
@@ -147,7 +139,6 @@ bstack_next(bstack_t *q)
 void
 bstack_reset(bstack_t *q)
 {
-    assert(q);
     q->ni = q->cc;
 }
 

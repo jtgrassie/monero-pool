@@ -45,7 +45,6 @@ developers.
 
 #include <lmdb.h>
 
-#include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1492,8 +1491,6 @@ response_to_block_template(json_object *result,
     {
         JSON_GET_OR_WARN(seed_hash, result, json_type_string);
         JSON_GET_OR_WARN(next_seed_hash, result, json_type_string);
-        assert(seed_hash != NULL);
-        assert(next_seed_hash != NULL);
         strncpy(block_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
         strncpy(block_template->next_seed_hash,
@@ -1704,7 +1701,6 @@ rpc_on_block_headers_range(const char* data, rpc_callback_t *callback)
 
     JSON_GET_OR_WARN(headers, result, json_type_array);
     size_t headers_len = json_object_array_length(headers);
-    assert(headers_len == BLOCK_HEADERS_RANGE);
     for (size_t i=0; i<headers_len; i++)
     {
         json_object *header = json_object_array_get_idx(headers, i);
@@ -3024,8 +3020,6 @@ miner_on_block_template(json_object *message, client_t *client)
     {
         JSON_GET_OR_WARN(seed_hash, params, json_type_string);
         JSON_GET_OR_WARN(next_seed_hash, params, json_type_string);
-        assert(seed_hash != NULL);
-        assert(next_seed_hash != NULL);
         strncpy(job->miner_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
         strncpy(job->miner_template->next_seed_hash,

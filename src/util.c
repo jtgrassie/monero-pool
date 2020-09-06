@@ -32,7 +32,6 @@ Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
 developers.
 */
 
-#include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -60,8 +59,6 @@ void
 hex_to_bin(const char *hex, const size_t hex_len,
         unsigned char *bin, const size_t bin_size)
 {
-    assert(hex_len % 2 == 0);
-    assert(bin_size >= hex_len >> 1);
     const char *ph = hex;
     unsigned char *end = bin + bin_size;
     while (*ph && bin < end)
@@ -75,7 +72,6 @@ void
 bin_to_hex(const unsigned char *bin, const size_t bin_size,
         char *hex, const size_t hex_size)
 {
-    assert(bin_size << 1 == hex_size);
     const char *hex_chars = "0123456789abcdef";
     char *ph = hex;
     const unsigned char *pb = bin;

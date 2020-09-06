@@ -32,7 +32,6 @@ Parts of the project are originally copyright (c) 2012-2013 The Cryptonote
 developers.
 */
 
-#include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>

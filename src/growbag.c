@@ -33,7 +33,6 @@ developers.
 */
 
 #include "growbag.h"
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -54,7 +53,6 @@ void
 gbag_new(gbag_t **out, size_t count, size_t size,
         gbag_recycle recycle, gbag_moved moved)
 {
-    assert(*out==NULL && count && size);
     gbag_t *gb = (gbag_t*) calloc(1, sizeof(gbag_t));
     gb->z = size;
     gb->max = count;
@@ -70,7 +68,6 @@ gbag_new(gbag_t **out, size_t count, size_t size,
 void
 gbag_free(gbag_t *gb)
 {
-    assert(gb && gb->max && gb->b);
     char *end = gb->b + (gb->max * gb->z);
     char *cur = gb->b;
     if (gb->rc)
@@ -94,7 +91,6 @@ gbag_free(gbag_t *gb)
 void *
 gbag_get(gbag_t *gb)
 {
-    assert(gb && gb->max && gb->b);
     char *end = gb->b + (gb->max * gb->z);
     char *from = gb->n;
     size_t nc, oc, ocz;
@@ -146,7 +142,6 @@ grow:
 void
 gbag_put(gbag_t *gb, void *item)
 {
-    assert(gb && item && gb->ref>0);
     if (gb->rc)
         gb->rc(item);
     memset(item, 0, gb->z);
@@ -169,14 +164,12 @@ gbag_used(gbag_t *gb)
 void *
 gbag_find(gbag_t *gb, const void *key, gbag_cmp cmp)
 {
-    assert(gb && gb->b && gb->max);
     return gbag_find_after(gb, key, cmp, NULL);
 }
 
 void *
 gbag_find_after(gbag_t *gb, const void *key, gbag_cmp cmp, void *from)
 {
-    assert(gb && gb->b && gb->max);
     char *s = gb->b;
     char *e = gb->b + (gb->max * gb->z);
     if (from)
@@ -188,7 +181,6 @@ gbag_find_after(gbag_t *gb, const void *key, gbag_cmp cmp, void *from)
 void *
 gbag_first(gbag_t *gb)
 {
-    assert(gb && gb->b && gb->max);
     char *s = gb->b;
     char *e = gb->b + (gb->max * gb->z);
     gb->ni = s;
@@ -205,7 +197,6 @@ gbag_first(gbag_t *gb)
 void *
 gbag_next(gbag_t *gb, void* from)
 {
-    assert(gb && gb->b && gb->max);
     if (from)
         gb->ni = ((char*)from) + gb->z;
     char *e = gb->b + (gb->max * gb->z);
