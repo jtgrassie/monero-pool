@@ -83,6 +83,7 @@ gbag_free(gbag_t *gb)
     gb->ni = NULL;
     gb->rc = NULL;
     gb->mv = NULL;
+    free(gb);
 }
 
 void *
