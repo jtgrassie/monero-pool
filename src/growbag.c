@@ -86,6 +86,16 @@ gbag_free(gbag_t *gb)
     free(gb);
 }
 
+static inline int
+gbag_occupied(gbag_t *gb, char *el)
+{
+    char *s = el;
+    char *e = el + gb->z;
+    while (s < e)
+        if (*s++) return 1;
+    return 0;
+}
+
 void *
 gbag_get(gbag_t *gb)
 {
@@ -99,7 +109,7 @@ gbag_get(gbag_t *gb)
 scan:
     while(gb->n < end)
     {
-        if (!*gb->n)
+        if (!gbag_occupied(gb, gb->n))
         {
             gb->ref++;
             rv = gb->n;
@@ -184,7 +194,7 @@ gbag_first(gbag_t *gb)
     gb->ni = s;
     while (s<e)
     {
-        if (*s)
+        if (gbag_occupied(gb, s))
             return s;
         s += gb->z;
         gb->ni = s;
@@ -202,7 +212,7 @@ gbag_next(gbag_t *gb, void* from)
     while (s<e)
     {
         gb->ni += gb->z;
-        if (*s)
+        if (gbag_occupied(gb, s))
             return s;
         s += gb->z;
     }
