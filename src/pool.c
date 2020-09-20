@@ -457,8 +457,8 @@ database_resize(void)
     const double threshold = 0.9;
     MDB_envinfo ei;
     MDB_stat st;
-    int rc;
-    char *err;
+    int rc = 0;
+    char *err = NULL;
 
     mdb_env_info(env, &ei);
     mdb_env_stat(env, &st);
@@ -510,9 +510,9 @@ unlock:
 static int
 database_init(const char* data_dir)
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
 
     rc = mdb_env_create(&env);
     mdb_env_set_maxdbs(env, (MDB_dbi) DB_COUNT_MAX);
@@ -603,10 +603,10 @@ database_close(void)
 static int
 store_share(uint64_t height, share_t *share)
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -639,10 +639,10 @@ store_share(uint64_t height, share_t *share)
 static int
 store_block(uint64_t height, block_t *block)
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -688,8 +688,8 @@ bail:
 uint64_t
 account_balance(const char *address)
 {
-    int rc;
-    char *err;
+    int rc = 0;
+    char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
     uint64_t balance  = 0;
@@ -741,10 +741,10 @@ static int
 balance_add(const char *address, uint64_t amount, MDB_txn *parent)
 {
     log_trace("Adding %"PRIu64" to %s's balance", amount, address);
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, parent, 0, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -805,10 +805,10 @@ payout_block(block_t *block, MDB_txn *parent)
       PPLNS
     */
     log_info("Payout on block at height: %"PRIu64, block->height);
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     uint64_t height = block->height;
     uint64_t total_paid = 0;
     if ((rc = mdb_txn_begin(env, parent, 0, &txn)) != 0)
@@ -893,10 +893,10 @@ process_blocks(block_t *blocks, size_t count)
       If both not orphaned and unlocked, payout, set unlocked.
       If block heights differ / orphaned, set orphaned.
     */
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -1352,7 +1352,7 @@ miner_send_job(client_t *client, bool response)
     memcpy(p, &instance_id, sizeof(instance_id));
 
     /* Get hashing blob */
-    size_t hashing_blob_size;
+    size_t hashing_blob_size = 0;
     unsigned char *hashing_blob = NULL;
     get_hashing_blob(block, bin_size, &hashing_blob, &hashing_blob_size);
 
@@ -1744,10 +1744,10 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
 static int
 startup_scan_round_shares()
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
 
     if (*config.upstream_host)
         return 0;
@@ -1798,10 +1798,10 @@ startup_payout(uint64_t height)
       Loop stored blocks < height - 60
       If block locked & not orphaned, payout
     */
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -2014,10 +2014,10 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     else
         log_info("Payout transfer successful");
 
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
 
     /* First, updated balance(s) */
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
@@ -2132,10 +2132,10 @@ send_payments(void)
     if (*config.upstream_host || config.disable_payouts)
         return 0;
     uint64_t threshold = 1000000000000 * config.payment_threshold;
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *cursor;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
     if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)) != 0)
     {
         err = mdb_strerror(rc);
@@ -2242,9 +2242,9 @@ fetch_last_block_header(void)
 static int
 store_last_height_time()
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
     MDB_val k, v;
     if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
     {
@@ -2411,10 +2411,10 @@ upstream_send_backlog()
     /*
       Send any unsent shares and blocks upstream.
     */
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    MDB_cursor *curshr, *curblk;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    MDB_cursor *curshr = NULL, *curblk = NULL;
     if (!upstream_last_height || !upstream_last_time || !upstream_event)
         return;
     log_info("Sending upstream shares/blocks since: %"PRIu64", %"PRIu64,
@@ -2523,7 +2523,7 @@ trusted_on_client_share(client_t *client)
     */
     struct evbuffer *input = bufferevent_get_input(client->bev);
     share_t s;
-    int rc;
+    int rc = 0;
     evbuffer_remove(input, (void*)&s, sizeof(share_t));
     log_debug("Received share from downstream with difficulty: %"PRIu64,
             s.difficulty);
@@ -2545,7 +2545,7 @@ trusted_on_client_block(client_t *client)
 {
     struct evbuffer *input = bufferevent_get_input(client->bev);
     block_t b;
-    int rc;
+    int rc = 0;
     evbuffer_remove(input, (void*)&b, sizeof(block_t));
     pool_stats.pool_blocks_found++;
     pool_stats.last_block_found = b.timestamp;
@@ -2576,10 +2576,10 @@ upstream_on_stats(struct bufferevent *bev)
 static int
 upstream_on_balance(struct bufferevent *bev)
 {
-    int rc;
-    char *err;
-    MDB_txn *txn;
-    uint64_t balance;
+    int rc = 0;
+    char *err = NULL;
+    MDB_txn *txn = NULL;
+    uint64_t balance = 0;
     char address[ADDRESS_MAX];
     struct evbuffer *input = bufferevent_get_input(bev);
     evbuffer_remove(input, &balance, sizeof(uint64_t));
@@ -2609,8 +2609,8 @@ upstream_on_read(struct bufferevent *bev, void *ctx)
 {
     struct evbuffer *input = bufferevent_get_input(bev);
     struct evbuffer_ptr tag;
-    unsigned char tnt[9];
-    size_t len;
+    unsigned char tnt[9] = {0};
+    size_t len = 0;
 
     input = bufferevent_get_input(bev);
     while ((len = evbuffer_get_length(input)) >= 9)
@@ -2689,8 +2689,8 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
 static void
 upstream_connect()
 {
-    struct addrinfo *info;
-    int rc;
+    struct addrinfo *info = NULL;
+    int rc = 0;
     char port[6] = {0};
 
     sprintf(port, "%d", config.upstream_port);
@@ -2759,7 +2759,8 @@ static const client_t *
 client_add(int fd, struct sockaddr_storage *ss,
         struct bufferevent *bev, bool downstream)
 {
-    client_t *c;
+    client_t *c = NULL;
+    int rc = 0;
     bool resize = gbag_used(bag_clients) == gbag_max(bag_clients);
     if (resize)
     {
@@ -2777,7 +2778,6 @@ client_add(int fd, struct sockaddr_storage *ss,
     c->bev = bev;
     c->connected_since = time(NULL);
     c->downstream = downstream;
-    int rc = 0;
     if ((rc = getnameinfo((struct sockaddr*)ss, sizeof(*ss),
                     c->host, MAX_HOST, NULL, 0, NI_NUMERICHOST)))
     {
@@ -2880,7 +2880,7 @@ miner_on_login(json_object *message, client_t *client)
     }
 
     const char *address = json_object_get_string(login);
-    uint8_t nt;
+    uint8_t nt = 0;
     if (parse_address(address, NULL, &nt, NULL))
     {
         send_validation_error(client,
@@ -3178,7 +3178,7 @@ miner_on_submit(json_object *message, client_t *client)
     memcpy(p, &result_nonce, sizeof(result_nonce));
 
     /* Get hashing blob */
-    size_t hashing_blob_size;
+    size_t hashing_blob_size = 0;
     unsigned char *hashing_blob = NULL;
     if (get_hashing_blob(block, bin_size,
                 &hashing_blob, &hashing_blob_size) != 0)
@@ -3311,7 +3311,7 @@ post_hash:
     {
         if (client->bad_shares)
             client->bad_shares--;
-        share_t share;
+        share_t share = {0,0,{0},0};
         share.height = bt->height;
         share.difficulty = job->target;
         strncpy(share.address, client->address, sizeof(share.address)-1);
@@ -3344,8 +3344,8 @@ miner_on_read(struct bufferevent *bev, void *ctx)
     const char *too_long = "Removing client. Message too long.";
     const char *invalid_json = "Removing client. Invalid JSON.";
     struct evbuffer *input, *output;
-    char *line;
-    size_t n;
+    char *line = NULL;
+    size_t n = 0;
     client_t *client = NULL;
 
     pthread_mutex_lock(&mutex_clients);
@@ -3457,11 +3457,11 @@ unlock:
 static void
 trusted_on_read(struct bufferevent *bev, void *ctx)
 {
-    struct evbuffer *input;
+    struct evbuffer *input = NULL;
     client_t *client = NULL;
     struct evbuffer_ptr tag;
-    unsigned char tnt[9];
-    size_t len;
+    unsigned char tnt[9] = {0};
+    size_t len = 0;
 
     pthread_mutex_lock(&mutex_clients);
     clients_reading++;
@@ -3579,7 +3579,7 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
     {
         char *s = config.trusted_allowed[0];
         char *e = s + (MAX_DOWNSTREAM * MAX_HOST);
-        char host[MAX_HOST];
+        char host[MAX_HOST] = {0};
         bool match = false;
         int rc = 0;
         if ((rc = getnameinfo((struct sockaddr*)&ss, slen,
@@ -4025,8 +4025,8 @@ static void *
 trusted_run(void *ctx)
 {
     evutil_socket_t listener;
-    struct addrinfo *info;
-    int rc;
+    struct addrinfo *info = NULL;
+    int rc = 0;
     char port[6] = {0};
 
     trusted_base = event_base_new();
@@ -4091,8 +4091,8 @@ static void
 run(void)
 {
     evutil_socket_t listener;
-    struct addrinfo *info;
-    int rc;
+    struct addrinfo *info = NULL;
+    int rc = 0;
     char port[6] = {0};
 
     pool_base = event_base_new();
@@ -4434,6 +4434,7 @@ int main(int argc, char **argv)
     clients_init();
 
     wui_context_t uic;
+    memset(&uic, 0, sizeof(wui_context_t));
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
