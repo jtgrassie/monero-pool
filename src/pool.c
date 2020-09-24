@@ -1399,7 +1399,10 @@ accounts_moved(const void *items, size_t count)
     e = s + count;
     pthread_rwlock_wrlock(&rwlock_acc);
     while (s<e)
+    {
         HASH_REPLACE_STR(accounts, address, s, r);
+        s++;
+    }
     pthread_rwlock_unlock(&rwlock_acc);
 }
 
@@ -1411,7 +1414,10 @@ clients_moved(const void *items, size_t count)
     e = s + count;
     pthread_rwlock_wrlock(&rwlock_cfd);
     while (s<e)
+    {
         HASH_REPLACE_INT(clients_by_fd, fd, s, r);
+        s++;
+    }
     pthread_rwlock_unlock(&rwlock_cfd);
 }
 
