@@ -470,6 +470,9 @@ database_resize(void)
             log_warn("Cannot cannot acquire lock");
             return rc;
         }
+        pthread_mutex_lock(&mutex_clients);
+        while (clients_reading)
+            pthread_cond_wait(&cond_clients, &mutex_clients);
         if ((rc = mdb_env_set_mapsize(env, DB_INIT_SIZE)) != 0)
         {
             err = mdb_strerror(rc);
@@ -492,6 +495,9 @@ database_resize(void)
             log_warn("Cannot cannot acquire lock");
             return rc;
         }
+        pthread_mutex_lock(&mutex_clients);
+        while (clients_reading)
+            pthread_cond_wait(&cond_clients, &mutex_clients);
         if ((rc = mdb_env_set_mapsize(env, ns)) != 0)
         {
             err = mdb_strerror(rc);
@@ -503,6 +509,7 @@ database_resize(void)
     }
     return 0;
 unlock:
+    pthread_mutex_unlock(&mutex_clients);
     pthread_rwlock_unlock(&rwlock_tx);
     return rc;
 }
