@@ -4030,7 +4030,7 @@ sigusr1_handler(evutil_socket_t fd, short event, void *arg)
 static void
 sigint_handler(int sig)
 {
-    signal(SIGINT, SIG_DFL);
+    signal(sig, SIG_DFL);
     exit(0);
 }
 
@@ -4421,6 +4421,7 @@ int main(int argc, char **argv)
     log_set_udata(&mutex_log);
     log_set_lock(log_lock);
     signal(SIGINT, sigint_handler);
+    signal(SIGTERM, sigint_handler);
     signal(SIGPIPE, SIG_IGN);
     atexit(cleanup);
 
