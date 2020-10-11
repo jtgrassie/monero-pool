@@ -42,6 +42,7 @@ struct gbag_t
     char * b;
     char * n;
     char * ni;
+    char * no;
     gbag_recycle rc;
     gbag_moved mv;
 };
@@ -57,6 +58,7 @@ gbag_new(gbag_t **out, size_t count, size_t size,
     gb->b = (char*) calloc(gb->max, gb->z);
     gb->n = gb->b;
     gb->ni = gb->b;
+    gb->no = (char*) calloc(1, size);
     gb->rc = recycle;
     gb->mv = moved;
     *out = gb;
@@ -76,6 +78,7 @@ gbag_free(gbag_t *gb)
         }
     }
     free(gb->b);
+    free(gb->no);
     gb->max = 0;
     gb->ref = 0;
     gb->b = NULL;
@@ -89,11 +92,7 @@ gbag_free(gbag_t *gb)
 static inline int
 gbag_occupied(gbag_t *gb, char *el)
 {
-    char *s = el;
-    char *e = el + gb->z;
-    while (s < e)
-        if (*s++) return 1;
-    return 0;
+    return *el || memcmp(el, gb->no, gb->z);
 }
 
 void *
