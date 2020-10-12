@@ -81,9 +81,9 @@ endif
 
 W = -W -Wall -Wno-unused-parameter -Wuninitialized
 OPT = -maes -fPIC
-CFLAGS = $(W) -Wbad-function-cast $(OPT) -std=c99
-CXXFLAGS = $(W) -Wno-reorder $(OPT) -std=c++11
-LDPARAM = -fPIC -pie
+CFLAGS += $(W) -Wbad-function-cast $(OPT) -std=c99
+CXXFLAGS += $(W) -Wno-reorder $(OPT) -std=c++11
+LDPARAM += -fPIC -pie
 
 ifeq ($(OS), Darwin)
   CXXFLAGS += -stdlib=libc++
