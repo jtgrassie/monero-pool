@@ -148,7 +148,7 @@ PKG_INC := $(shell pkg-config \
 
 LIBPATH := /opt/local/lib/ /usr/local/lib
 
-C++ = g++
+CXX = g++
 CC = gcc
 XXD := $(shell command -v xxd 2> /dev/null)
 
@@ -171,7 +171,7 @@ SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
 
 $(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 	@echo Linking $(OBJECTS)...
-	$(C++) -o $(STORE)/$(TARGET) \
+	$(CXX) -o $(STORE)/$(TARGET) \
 	  $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS) \
 	  $(LDPARAM) $(MONERO_LIBS) \
 	  $(foreach LIBRARY, $(LIBS),-l$(LIBRARY)) \
@@ -182,7 +182,7 @@ $(TARGET): preflight dirs $(OBJECTS) $(COBJECTS) $(SOBJECTS) $(HTMLOBJECTS)
 
 $(STORE)/%.o: %.cpp
 	@echo Creating object file for $*...
-	$(C++) -Wp,-MMD,$(STORE)/$*.dd $(CXXFLAGS) \
+	$(CXX) -Wp,-MMD,$(STORE)/$*.dd $(CXXFLAGS) \
 	  $(foreach INC,$(INCPATH),-I$(INC)) \
 	  $(PKG_INC) \
 	  $(foreach CPPDEF,$(CPPDEFS),-D$(CPPDEF)) \
