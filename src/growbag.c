@@ -40,6 +40,7 @@ struct gbag_t
     size_t max;
     size_t ref;
     char * b;
+    char * e;
     char * n;
     char * ni;
     char * no;
@@ -56,6 +57,7 @@ gbag_new(gbag_t **out, size_t count, size_t size,
     gb->max = count;
     gb->ref = 0;
     gb->b = (char*) calloc(gb->max, gb->z);
+    gb->e = gb->b;
     gb->n = gb->b;
     gb->ni = gb->b;
     gb->no = (char*) calloc(1, size);
@@ -82,6 +84,7 @@ gbag_free(gbag_t *gb)
     gb->max = 0;
     gb->ref = 0;
     gb->b = NULL;
+    gb->e = NULL;
     gb->n = NULL;
     gb->ni = NULL;
     gb->rc = NULL;
@@ -113,6 +116,8 @@ scan:
             gb->ref++;
             rv = gb->n;
             gb->n += gb->z;
+            if (rv >= gb->e)
+                gb->e = gb->n;
             return rv;
         }
         gb->n += gb->z;
@@ -141,6 +146,7 @@ grow:
         gb->ref++;
         gb->b = b;
         gb->n = rv + gb->z;
+        gb->e = gb->n;
         return rv;
     }
     return NULL;
@@ -149,6 +155,8 @@ grow:
 void
 gbag_put(gbag_t *gb, void *item)
 {
+    if (gb->e > gb->b && item + gb->z == gb->e)
+        gb->e -= gb->z;
     if (gb->rc)
         gb->rc(item);
     memset(item, 0, gb->z);
@@ -189,9 +197,9 @@ void *
 gbag_first(gbag_t *gb)
 {
     char *s = gb->b;
-    char *e = gb->b + (gb->max * gb->z);
+    char *e = gb->e;
     gb->ni = s;
-    while (s<e)
+    while (s < e)
     {
         if (gbag_occupied(gb, s))
             return s;
@@ -206,9 +214,9 @@ gbag_next(gbag_t *gb, void* from)
 {
     if (from)
         gb->ni = ((char*)from) + gb->z;
-    char *e = gb->b + (gb->max * gb->z);
+    char *e = gb->e;
     char *s = gb->ni;
-    while (s<e)
+    while (s < e)
     {
         gb->ni += gb->z;
         if (gbag_occupied(gb, s))
