@@ -164,7 +164,7 @@ SOBJECTS := $(addprefix $(STORE)/, $(SSOURCE:.S=.o))
 HTMLOBJECTS := $(addprefix $(STORE)/, $(HTMLSOURCE:.html=.o))
 DFILES := $(addprefix $(STORE)/,$(SOURCE:.cpp=.d))
 CDFILES := $(addprefix $(STORE)/,$(CSOURCE:.c=.d))
-SDFILES := $(addprefix $(STORE)/,$(CSOURCE:.S=.d))
+SDFILES := $(addprefix $(STORE)/,$(SSOURCE:.S=.d))
 
 
 .PHONY: clean dirs debug release preflight
