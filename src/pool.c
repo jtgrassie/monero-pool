@@ -180,6 +180,7 @@ typedef struct config_t
     uint16_t upstream_port;
     char pool_view_key[64];
     int processes;
+    int32_t cull_shares;
 } config_t;
 
 typedef struct block_template_t
@@ -2765,10 +2766,74 @@ timer_on_120s(int fd, short kind, void *ctx)
 static void
 timer_on_10m(int fd, short kind, void *ctx)
 {
+    struct timeval timeout = { .tv_sec = 600, .tv_usec = 0 };
+    time_t now = time(NULL);
+    int rc = 0;
+    uint64_t cc = 0;
+    time_t cut = now - config.cull_shares * 86400;
+    MDB_txn *txn = NULL;
+    MDB_cursor *cursor = NULL;
+    MDB_cursor_op op = MDB_FIRST;
+    MDB_val k, v;
+
     if (database_resize())
         log_warn("DB resize needed, will retry later");
+
     send_payments();
-    struct timeval timeout = { .tv_sec = 600, .tv_usec = 0 };
+
+    /* culling old shares */
+    if (config.cull_shares < 1)
+        goto done;
+    log_debug("Culling shares older than: %d days", config.cull_shares);
+    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)) != 0)
+    {
+        log_error("%s", mdb_strerror(rc));
+        goto done;
+    }
+    if ((rc = mdb_cursor_open(txn, db_shares, &cursor)) != 0)
+    {
+        log_error("%s", mdb_strerror(rc));
+        goto abort;
+    }
+    while (1)
+    {
+        time_t st;
+        if ((rc = mdb_cursor_get(cursor, &k, &v, op)))
+        {
+            if (rc != MDB_NOTFOUND)
+            {
+                log_error("%s", mdb_strerror(rc));
+                goto abort;
+            }
+            break;
+        }
+        st = ((share_t*)v.mv_data)->timestamp;
+        if (st < cut)
+        {
+            if ((rc = mdb_cursor_del(cursor, 0)))
+            {
+                log_error("%s", mdb_strerror(rc));
+                goto abort;
+            }
+            cc++;
+        }
+        else
+            break;
+        op = MDB_NEXT;
+    }
+
+    mdb_cursor_close(cursor);
+    if ((rc = mdb_txn_commit(txn)))
+        log_error("%s", mdb_strerror(rc));
+    else
+        log_debug("Culled shares: %"PRIu64, cc);
+    goto done;
+
+abort:
+    if (cursor)
+        mdb_cursor_close(cursor);
+    mdb_txn_abort(txn);
+done:
     evtimer_add(timer_10m, &timeout);
 }
 
@@ -3674,6 +3739,7 @@ read_config(const char *config_file)
     config.disable_hash_check = false;
     config.disable_payouts = false;
     strcpy(config.data_dir, "./data");
+    config.cull_shares = -1;
 
     char path[MAX_PATH] = {0};
     if (config_file)
@@ -3844,6 +3910,10 @@ read_config(const char *config_file)
             if (config.processes < -1)
                 config.processes = -1;
         }
+        else if (strcmp(key, "cull-shares") == 0)
+        {
+            config.cull_shares = atoi(val);
+        }
         else if (strcmp(key, "trusted-listen") == 0)
         {
             strncpy(config.trusted_listen, val,
@@ -3983,6 +4053,7 @@ static void print_config()
         "  pid-file = %s\n"
         "  forked = %u\n"
         "  processes = %d\n"
+        "  cull-shares = %d\n"
         "  trusted-listen = %s\n"
         "  trusted-port = %u\n"
         "  trusted-allowed = %s\n"
@@ -4017,6 +4088,7 @@ static void print_config()
         config.pid_file,
         config.forked,
         config.processes,
+        config.cull_shares,
         config.trusted_listen,
         config.trusted_port,
         display_allowed,
