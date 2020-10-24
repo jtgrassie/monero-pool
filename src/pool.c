@@ -319,6 +319,7 @@ static client_t *clients_by_fd = NULL;
 static account_t *accounts = NULL;
 static gbag_t *bag_accounts;
 static gbag_t *bag_clients;
+static bool abattoir;
 
 #ifdef HAVE_RX
 extern void rx_stop_mining();
@@ -465,7 +466,7 @@ database_resize(void)
 
     if(ei.me_mapsize < DB_INIT_SIZE)
     {
-        if ((rc = pthread_rwlock_trywrlock(&rwlock_tx)))
+        if ((rc = pthread_rwlock_wrlock(&rwlock_tx)))
         {
             log_warn("Cannot cannot acquire lock");
             return rc;
@@ -490,7 +491,7 @@ database_resize(void)
     if ((double)used / ei.me_mapsize > threshold)
     {
         uint64_t ns = (uint64_t) ei.me_mapsize + DB_GROW_SIZE;
-        if ((rc = pthread_rwlock_trywrlock(&rwlock_tx)))
+        if ((rc = pthread_rwlock_wrlock(&rwlock_tx)))
         {
             log_warn("Cannot cannot acquire lock");
             return rc;
@@ -893,6 +894,9 @@ payout_block(block_t *block, MDB_txn *parent)
 static int
 process_blocks(block_t *blocks, size_t count)
 {
+    if (!abattoir)
+        return 0;
+
     log_debug("Processing blocks");
     /*
       For each block, lookup block in db.
@@ -4186,8 +4190,13 @@ run(void)
     else
         fetch_last_block_header();
     fetch_view_key();
-    timer_10m = evtimer_new(pool_base, timer_on_10m, NULL);
-    timer_on_10m(-1, EV_TIMEOUT, NULL);
+
+    if (abattoir)
+    {
+        timer_10m = evtimer_new(pool_base, timer_on_10m, NULL);
+        timer_on_10m(-1, EV_TIMEOUT, NULL);
+    }
+
     if (*config.upstream_host)
     {
         timer_10s = evtimer_new(pool_base, timer_on_10s, NULL);
@@ -4416,7 +4425,11 @@ int main(int argc, char **argv)
             {}
             _exit(0);
         }
+        else if (pid == 0 && nproc == 0)
+            abattoir = true;
     }
+    else
+        abattoir = true;
 
     log_set_udata(&mutex_log);
     log_set_lock(log_lock);
