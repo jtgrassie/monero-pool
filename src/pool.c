@@ -227,6 +227,7 @@ typedef struct client_t
     uint8_t bad_shares;
     bool downstream;
     uint32_t downstream_accounts;
+    uint64_t req_diff;
     UT_hash_handle hh;
 } client_t;
 
@@ -1062,16 +1063,26 @@ template_recycle(void *item)
 static uint64_t
 client_target(client_t *client, job_t *job)
 {
+    uint32_t rtt = client->is_xnp ? 5 : config.retarget_time;
     uint64_t bd = 0xFFFFFFFFFFFFFFFF;
+    uint64_t sd = config.pool_start_diff;
+    double cd;
+    double duration;
+    unsigned idx = 0;
+    uint64_t rt;
+
     if (config.pool_fixed_diff)
         return config.pool_fixed_diff;
+    if (client->req_diff)
+        sd = fmax(client->req_diff, sd);
     if (job->block_template)
         bd = job->block_template->difficulty;
-    double duration = difftime(time(NULL), client->connected_since);
-    uint8_t retarget_time = client->is_xnp ? 5 : config.retarget_time;
-    uint64_t target = fmin(fmax((double)client->hashes /
-            duration * retarget_time, config.pool_start_diff), bd);
-    return target;
+    duration = difftime(time(NULL), client->connected_since);
+    if (duration > hr_intervals[2])
+        idx = 1;
+    cd = client->hr_stats.avg[idx] * rtt;
+    rt = fmin(fmax(cd, sd), bd);
+    return rt;
 }
 
 static bool
@@ -2977,6 +2988,12 @@ miner_on_login(json_object *message, client_t *client)
     }
 
     const char *worker_id = json_object_get_string(pass);
+    char *rd = strstr(worker_id, "d=");
+    if (rd && rd[2])
+    {
+        client->req_diff = strtoull(rd+2, NULL, 0);
+        log_trace("Miner requested diff: %"PRIu64, client->req_diff);
+    }
 
     json_object *agent = NULL;
     if (json_object_object_get_ex(params, "agent", &agent))
