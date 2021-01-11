@@ -3072,8 +3072,16 @@ miner_on_block_template(json_object *message, client_t *client)
     if (dh > TEMLATE_HEIGHT_VARIANCE)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Bad height. "
-                "Differs to pool by %"PRIu64" blocks.", dh);
+        snprintf(m, 64, "Bad height delta: %"PRIu64, dh);
+        send_validation_error(client, m);
+        return;
+    }
+
+    int64_t d = json_object_get_int64(difficulty);
+    if (d < (int64_t)pool_stats.network_difficulty)
+    {
+        char m[64] = {0};
+        snprintf(m, 64, "Low difficulty: %"PRIu64, d);
         send_validation_error(client, m);
         return;
     }
@@ -3102,8 +3110,8 @@ miner_on_block_template(json_object *message, client_t *client)
 
     job->miner_template = calloc(1, sizeof(block_template_t));
     job->miner_template->blocktemplate_blob = strdup(btb);
-    job->miner_template->difficulty = json_object_get_int64(difficulty);
-    job->miner_template->height = json_object_get_int64(height);
+    job->miner_template->difficulty = d;
+    job->miner_template->height = h;
     strncpy(job->miner_template->prev_hash,
             json_object_get_string(prev_hash), 64);
 
