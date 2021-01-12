@@ -63,13 +63,10 @@ bstack_free(bstack_t *q)
 {
     if (q->rf)
     {
-        char *ps = q->b;
-        char *pe = ps + (q->cc * q->z);
-        while (ps < pe)
-        {
-            q->rf(ps);
-            ps += q->z;
-        }
+        void *pb;
+        bstack_reset(q);
+        while ((pb = bstack_next(q)))
+            q->rf(pb);
     }
     free(q->b);
     free(q);
@@ -98,7 +95,7 @@ bstack_drop(bstack_t *q)
     if (!q->cc)
         return;
     q->n--;
-    size_t idx = (q->n - q->cc) % q->c;
+    size_t idx = q->n % q->c;
     void *pb = q->b + (idx * q->z);
     q->cc--;
     if (q->rf)
@@ -110,10 +107,8 @@ bstack_top(bstack_t *q)
 {
     if (!q->cc)
         return NULL;
-    size_t idx = (q->n - (q->cc + 1)) % q->c;
-    if (q->cc < q->c)
-        idx = q->cc-1;
-    void *pb = idx ? q->b + (idx * q->z) : q->b;
+    size_t idx = (q->n-1) % q->c;
+    void *pb = q->b + (idx * q->z);
     return pb;
 }
 
