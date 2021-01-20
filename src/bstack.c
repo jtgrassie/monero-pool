@@ -94,10 +94,9 @@ bstack_drop(bstack_t *q)
 {
     if (!q->cc)
         return;
-    q->n--;
-    size_t idx = q->n % q->c;
-    void *pb = q->b + (idx * q->z);
     q->cc--;
+    size_t idx = --q->n % q->c;
+    void *pb = q->b + (idx * q->z);
     if (q->rf)
         q->rf(pb);
 }
@@ -112,7 +111,8 @@ bstack_top(bstack_t *q)
     return pb;
 }
 
-size_t bstack_count(bstack_t *q)
+size_t
+bstack_count(bstack_t *q)
 {
     return q->cc;
 }

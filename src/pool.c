@@ -1771,7 +1771,7 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
 }
 
 static int
-startup_scan_round_shares()
+startup_scan_round_shares(void)
 {
     int rc = 0;
     char *err = NULL;
@@ -2269,7 +2269,7 @@ fetch_last_block_header(void)
 }
 
 static int
-store_last_height_time()
+store_last_height_time(void)
 {
     int rc = 0;
     char *err = NULL;
@@ -2341,7 +2341,7 @@ trusted_send_balance(client_t *client, const char *address)
 }
 
 static void
-upstream_send_ping()
+upstream_send_ping(void)
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     char data[9];
@@ -2367,7 +2367,7 @@ upstream_send_account_connect(uint32_t count)
 }
 
 static void
-upstream_send_account_disconnect()
+upstream_send_account_disconnect(void)
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     char data[9];
@@ -2435,7 +2435,7 @@ upstream_send_client_block(block_t *block)
 }
 
 static void
-upstream_send_backlog()
+upstream_send_backlog(void)
 {
     /*
       Send any unsent shares and blocks upstream.
@@ -2716,7 +2716,7 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
 }
 
 static void
-upstream_connect()
+upstream_connect(void)
 {
     struct addrinfo *info = NULL;
     int rc = 0;
@@ -4030,7 +4030,8 @@ read_config(const char *config_file)
     }
 }
 
-static void print_config()
+static void
+print_config(void)
 {
     char display_allowed[MAX_HOST*MAX_DOWNSTREAM] = {0};
     if (*config.trusted_allowed[0])
@@ -4063,8 +4064,8 @@ static void print_config()
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
         "  pool-fixed-diff = %"PRIu64"\n"
-        "  pool-fee = %.3f\n"
-        "  payment-threshold = %.2f\n"
+        "  pool-fee = %g\n"
+        "  payment-threshold = %g\n"
         "  share-mul = %.2f\n"
         "  retarget-time = %u\n"
         "  retarget-ratio = %.2f\n"
