@@ -2974,16 +2974,20 @@ miner_on_login(json_object *message, client_t *client)
 
     const char *address = json_object_get_string(login);
     uint8_t nt = 0;
-    if (parse_address(address, NULL, &nt, NULL))
+    uint64_t pf = 0;
+    if (parse_address(address, &pf, &nt, NULL))
     {
-        send_validation_error(client,
-                "Invalid address");
+        send_validation_error(client, "Invalid address");
         return;
     }
     if (nt != nettype)
     {
-        send_validation_error(client,
-                "Invalid address network type");
+        send_validation_error(client, "Invalid address network type");
+        return;
+    }
+    if (is_integrated(pf))
+    {
+        send_validation_error(client, "Invalid address type");
         return;
     }
 

@@ -120,6 +120,15 @@ int parse_address(const char *input, uint64_t *prefix,
     return XMR_NO_ERROR;
 }
 
+int is_integrated(uint64_t prefix)
+{
+    if (prefix == CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX ||
+            prefix == testnet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX ||
+            prefix == stagenet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX)
+        return 1;
+    return 0;
+}
+
 int get_block_hash(const unsigned char *input, const size_t in_size,
         unsigned char *output)
 {
