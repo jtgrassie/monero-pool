@@ -2260,6 +2260,13 @@ send_payments(void)
         if (amount < threshold)
             continue;
 
+        if (*(uint64_t*)(address+95))
+        {
+            log_warn("Skipping payment to integrated address: %s, %"PRIu64,
+                    address, amount);
+            continue;
+        }
+
         log_info("Sending payment: %"PRIu64", %.8s", amount, address);
 
         payment_t *p = (payment_t*) gbag_get(bag_pay);
