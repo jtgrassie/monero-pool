@@ -163,6 +163,7 @@ typedef struct config_t
     char pool_listen[MAX_HOST];
     uint16_t pool_port;
     uint16_t pool_ssl_port;
+    uint32_t pool_syn_backlog;
     uint32_t log_level;
     uint16_t webui_port;
     char log_file[MAX_PATH];
@@ -3761,6 +3762,7 @@ read_config(const char *config_file)
     strcpy(config.pool_listen, "0.0.0.0");
     config.pool_port = 4242;
     config.pool_ssl_port = 0;
+    config.pool_syn_backlog = 16;
     config.log_level = 5;
     config.webui_port = 4243;
     config.block_notified = false;
@@ -3829,6 +3831,10 @@ read_config(const char *config_file)
         else if (strcmp(key, "pool-ssl-port") == 0)
         {
             config.pool_ssl_port = atoi(val);
+        }
+        else if (strcmp(key, "pool-syn-backlog") == 0)
+        {
+            config.pool_syn_backlog = atoi(val);
         }
         else if (strcmp(key, "webui-port") == 0)
         {
@@ -4057,6 +4063,7 @@ print_config(void)
         "  pool-listen = %s\n"
         "  pool-port = %u\n"
         "  pool-ssl-port = %u\n"
+        "  pool-syn-backlog = %u\n"
         "  webui-port= %u\n"
         "  rpc-host = %s\n"
         "  rpc-port = %u\n"
@@ -4092,6 +4099,7 @@ print_config(void)
         config.pool_listen,
         config.pool_port,
         config.pool_ssl_port,
+        config.pool_syn_backlog,
         config.webui_port,
         config.rpc_host,
         config.rpc_port,
@@ -4183,7 +4191,7 @@ trusted_run(void *ctx)
     freeaddrinfo(info);
     info = NULL;
 
-    if (listen(listener, 16)<0)
+    if (listen(listener, config.pool_syn_backlog)<0)
     {
         perror("listen");
         goto bail;
@@ -4248,7 +4256,7 @@ run(void)
     freeaddrinfo(info);
     info = NULL;
 
-    if (listen(listener, 16)<0)
+    if (listen(listener, config.pool_syn_backlog)<0)
     {
         perror("listen");
         goto bail;
