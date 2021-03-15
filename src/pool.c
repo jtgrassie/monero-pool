@@ -1959,7 +1959,7 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     top = bstack_top(bsh);
     pool_stats.network_difficulty = top->difficulty;
     pool_stats.network_hashrate = top->difficulty / BLOCK_TIME;
-    pool_stats.network_height = top->height;
+    pool_stats.network_height = top->height + 1;
     update_pool_hr();
 
     if (need_new_template)
