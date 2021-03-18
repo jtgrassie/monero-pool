@@ -42,6 +42,13 @@
                 word-wrap: break-word;
             }
         </style>
+        <script>
+            if (window.trustedTypes && window.trustedTypes.createPolicy) {
+                window.trustedTypes.createPolicy('default', {
+                    createHTML: (string, sink) => string
+                });
+            }
+        </script>
     </head>
     <body>
         <header>Monero Mining Pool</header>
