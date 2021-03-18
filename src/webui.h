@@ -52,7 +52,7 @@ typedef struct wui_context_t
     double pool_fee;
     double payment_threshold;
     uint16_t pool_port;
-    char pool_listen[256];
+    char pool_webui_listen[256];
     uint16_t pool_ssl_port;
     unsigned allow_self_select;
 } wui_context_t;
