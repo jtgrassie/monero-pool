@@ -3850,7 +3850,7 @@ read_config(const char *config_file)
         }
         else if (strcmp(key, "wallet-rpc-host") == 0)
         {
-            strncpy(config.wallet_rpc_host, val, sizeof(config.rpc_host)-1);
+            strncpy(config.wallet_rpc_host, val, sizeof(config.wallet_rpc_host)-1);
         }
         else if (strcmp(key, "wallet-rpc-port") == 0)
         {
