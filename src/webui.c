@@ -151,7 +151,7 @@ thread_main(void *ctx)
     int rc;
     char port[6] = {0};
     sprintf(port, "%d", context->port);
-    if ((rc = getaddrinfo(context->pool_listen, port, 0, &info)))
+    if ((rc = getaddrinfo(context->listen, port, 0, &info)))
     {
         log_error("Error parsing listen address: %s", gai_strerror(rc));
         return 0;
@@ -179,7 +179,7 @@ thread_main(void *ctx)
 int
 start_web_ui(wui_context_t *context)
 {
-    log_info("Starting Web UI on %s:%d", context->pool_listen, context->port);
+    log_info("Starting Web UI on %s:%d", context->listen, context->port);
     if (webui_base || handle)
     {
         log_error("Already running");
