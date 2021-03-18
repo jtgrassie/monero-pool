@@ -149,7 +149,10 @@
                 var stats = JSON.parse(xhr.responseText);
                 for (var e in stats)
                 {
-                    var el = document.querySelector("#"+e);
+                  var els = document.querySelectorAll("#"+e);
+                  for (var i = 0; i < els.length; i += 1)
+                  {
+                    var el = els[i]
                     if (!el)
                         continue;
                     if (/^last/.test(e))
@@ -177,6 +180,7 @@
                     }
                     else
                         el.innerHTML = stats[e];
+                  }
                 }
             };
 
