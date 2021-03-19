@@ -165,6 +165,7 @@ typedef struct config_t
     uint16_t pool_ssl_port;
     uint32_t pool_syn_backlog;
     uint32_t log_level;
+    char webui_listen[MAX_HOST];
     uint16_t webui_port;
     char log_file[MAX_PATH];
     bool block_notified;
@@ -3767,6 +3768,7 @@ read_config(const char *config_file)
     config.pool_ssl_port = 0;
     config.pool_syn_backlog = 16;
     config.log_level = 5;
+    strcpy(config.webui_listen, "0.0.0.0");
     config.webui_port = 4243;
     config.block_notified = false;
     config.disable_self_select = false;
@@ -3838,6 +3840,10 @@ read_config(const char *config_file)
         else if (strcmp(key, "pool-syn-backlog") == 0)
         {
             config.pool_syn_backlog = atoi(val);
+        }
+        else if (strcmp(key, "webui-listen") == 0)
+        {
+            strncpy(config.webui_listen, val, sizeof(config.webui_listen)-1);
         }
         else if (strcmp(key, "webui-port") == 0)
         {
@@ -4067,6 +4073,7 @@ print_config(void)
         "  pool-port = %u\n"
         "  pool-ssl-port = %u\n"
         "  pool-syn-backlog = %u\n"
+        "  webui-listen = %s\n"
         "  webui-port= %u\n"
         "  rpc-host = %s\n"
         "  rpc-port = %u\n"
@@ -4103,6 +4110,7 @@ print_config(void)
         config.pool_port,
         config.pool_ssl_port,
         config.pool_syn_backlog,
+        config.webui_listen,
         config.webui_port,
         config.rpc_host,
         config.rpc_port,
@@ -4575,10 +4583,10 @@ int main(int argc, char **argv)
 
     wui_context_t uic;
     memset(&uic, 0, sizeof(wui_context_t));
+    strncpy(uic.listen, config.webui_listen, sizeof(uic.listen)-1);
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
-    strncpy(uic.pool_listen, config.pool_listen, sizeof(uic.pool_listen)-1);
     uic.pool_port = config.pool_port;
     uic.pool_ssl_port = config.pool_ssl_port;
     uic.allow_self_select = !config.disable_self_select;
