@@ -1215,6 +1215,7 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
                 "\"job_id\":\"%.32s\",\"target\":\"%s\","
                 "\"extra_nonce\":\"%s\", \"pool_wallet\":\"%s\","
                 "\"seed_hash\":\"%.64s\",\"next_seed_hash\":\"%.64s\"},"
+                "\"extensions\":[\"keepalive\"],"
                 "\"status\":\"OK\"}}\n",
                 json_id, client_id, job_id, target_hex, extra_hex,
                 config.pool_wallet, seed_hash, next_seed_hash);
@@ -1256,6 +1257,7 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
                 "\"blob\":\"%s\",\"job_id\":\"%.32s\",\"target\":\"%s\","
                 "\"height\":%"PRIu64",\"seed_hash\":\"%.64s\","
                 "\"next_seed_hash\":\"%.64s\"},"
+                "\"extensions\":[\"keepalive\"],"
                 "\"status\":\"OK\"}}\n",
                 json_id, client_id, blob, job_id, target_hex, height,
                 seed_hash, next_seed_hash);
