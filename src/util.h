@@ -39,5 +39,6 @@ void bin_to_hex(const unsigned char *bin, size_t bin_size, char *hex,
         const size_t hex_size);
 void reverse_bin(unsigned char *bin, const size_t len);
 char *stecpy(char *dst, const char *src, const char *end);
+char *trim(char *str);
 
 #endif

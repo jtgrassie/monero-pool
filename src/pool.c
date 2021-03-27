@@ -3752,6 +3752,10 @@ log_lock(void *ud, int lock)
 static void
 read_config(const char *config_file)
 {
+    char line[1024] = {0};
+    char path[MAX_PATH] = {0};
+    FILE *fp = NULL;
+
     /* Start with some defaults for any missing... */
     strcpy(config.rpc_host, "127.0.0.1");
     config.rpc_port = 18081;
@@ -3777,7 +3781,6 @@ read_config(const char *config_file)
     strcpy(config.data_dir, "./data");
     config.cull_shares = -1;
 
-    char path[MAX_PATH] = {0};
     if (config_file)
     {
         strncpy(path, config_file, MAX_PATH-1);
@@ -3804,27 +3807,25 @@ read_config(const char *config_file)
     }
     log_info("Reading config from: %s", path);
 
-    FILE *fp = fopen(path, "r");
+    fp = fopen(path, "r");
     if (!fp)
     {
         log_fatal("Cannot open config file. Aborting.");
         exit(-1);
     }
-    char line[1024] = {0};
-    char *key;
-    char *val;
-    const char *tok = " =";
     while (fgets(line, sizeof(line), fp))
     {
+        char *key = NULL, *val = NULL, *brk = NULL;
         if (*line == '#')
             continue;
-        key = strtok(line, tok);
-        if (!key)
+        brk = strchr(line, '=');
+        if (!brk)
             continue;
-        val = strtok(NULL, tok);
-        if (!val)
-            continue;
-        val[strcspn(val, "\r\n")] = 0;
+        *brk++ = 0;
+        key = trim(line);
+        brk[strcspn(brk, "\r\n")] = 0;
+        val = trim(brk);
+
         if (strcmp(key, "pool-listen") == 0)
         {
             strncpy(config.pool_listen, val, sizeof(config.pool_listen)-1);
@@ -3859,7 +3860,8 @@ read_config(const char *config_file)
         }
         else if (strcmp(key, "wallet-rpc-host") == 0)
         {
-            strncpy(config.wallet_rpc_host, val, sizeof(config.wallet_rpc_host)-1);
+            strncpy(config.wallet_rpc_host, val,
+                    sizeof(config.wallet_rpc_host)-1);
         }
         else if (strcmp(key, "wallet-rpc-port") == 0)
         {

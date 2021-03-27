@@ -105,3 +105,19 @@ stecpy(char *dst, const char *src, const char *end)
     return dst;
 }
 
+char *
+trim(char *str)
+{
+    char *start = str;
+    char *end = str + strlen(str);
+
+    while(*start && isspace(*start))
+        start++;
+
+    while(end > start && isspace(*(end - 1)))
+        end--;
+
+    *end = '\0';
+    return start;
+}
+
