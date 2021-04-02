@@ -3667,8 +3667,8 @@ listener_on_error(struct bufferevent *bev, short error, void *ctx)
     }
     else if (error & BEV_EVENT_ERROR)
     {
-        log_debug("[%s:%d] %s error: %d. Removing.",
-                client->host, client->port, type, errno);
+        log_debug("[%s:%d] %s error: %d (%s). Removing.",
+                client->host, client->port, type, errno, strerror(errno));
     }
     else if (error & BEV_EVENT_TIMEOUT)
     {
@@ -3786,7 +3786,7 @@ read_config(const char *config_file)
     {
         if (!getcwd(path, MAX_PATH))
         {
-            log_fatal("Cannot getcwd (%s). Aborting.", errno);
+            log_fatal("Cannot getcwd (%s). Aborting.", strerror(errno));
             exit(-1);
         }
         strcat(path, "/pool.conf");
