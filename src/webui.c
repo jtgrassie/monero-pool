@@ -78,16 +78,22 @@ send_json_stats(struct evhttp_request *req, void *arg)
 
     hdrs_in = evhttp_request_get_input_headers(req);
     const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
+    const char delim[] = ";";
     if (cookies)
     {
-        char *wa = strstr(cookies, "wa=");
-        if (wa)
-        {
-            wa += 3;
-            account_hr(mh, wa);
-            uint64_t balance = account_balance(wa);
-            mb = (double) balance / 1000000000000.0;
-        }
+      char *cookie_ptr = strtok(cookies, delim);
+      while(cookie_ptr != NULL)
+      {
+              char *wa = strstr(cookie_ptr, "wa=");
+              if (wa)
+              {
+                  wa += 3;
+                  account_hr(mh, wa);
+                  uint64_t balance = account_balance(wa);
+                  mb = (double) balance / 1000000000000.0;
+              }
+              cookie_ptr = strtok(NULL, delim);
+      }
     }
 
     evbuffer_add_printf(buf, "{"
