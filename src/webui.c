@@ -83,6 +83,9 @@ send_json_stats(struct evhttp_request *req, void *arg)
         char *wa = strstr(cookies, "wa=");
         if (wa)
         {
+            char *sc = strstr(wa, ";");
+            if (sc)
+                *sc = 0;
             wa += 3;
             account_hr(mh, wa);
             uint64_t balance = account_balance(wa);
