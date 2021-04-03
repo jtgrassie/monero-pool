@@ -83,7 +83,7 @@ send_json_stats(struct evhttp_request *req, void *arg)
         char *wa = strstr(cookies, "wa=");
         if (wa)
         {
-            char *sc = strstr(wa, ";");
+            char *sc = strchr(wa, ';');
             if (sc)
                 *sc = 0;
             wa += 3;
