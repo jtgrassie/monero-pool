@@ -33,8 +33,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define POOL_H
 
 void account_hr(double *avg, const char *address);
-uint64_t account_wc(const char *address);
-void account_rl(char *rig_list_out, char *end_pt, const char *address);
 uint64_t account_balance(const char *address);
+uint64_t worker_count(const char *address);
+void worker_list(char *list_start, char *list_end, const char *address);
 
 #endif

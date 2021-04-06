@@ -700,54 +700,6 @@ bail:
 }
 
 uint64_t
-account_wc(const char *address)
-{
-    account_t *account = NULL;
-    uint64_t wc = 0;
-    pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(accounts, address, account);
-    if (!account)
-        goto bail;
-    wc = (uint64_t)account->worker_count;
-bail:
-    pthread_rwlock_unlock(&rwlock_acc);
-    return wc;
-}
-
-void
-account_rl(char *rig_list_out, char *end_pt, const char *address)
-{
-    char *body = rig_list_out;
-    char *end = end_pt;
-    account_t *account = NULL;
-
-    if (strlen(address) > ADDRESS_MAX)
-        return;
-    pthread_rwlock_rdlock(&rwlock_acc);
-    HASH_FIND_STR(accounts, address, account);
-    if (!account)
-        goto bail;
-
-    client_t *c = (client_t*)gbag_first(bag_clients);
-    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-4))
-    {
-        if (strncmp(c->address, address, ADDRESS_MAX) == 0)
-        {
-            if(body == rig_list_out)
-            {
-                body = stecpy(body, "\"", end);
-            }
-            else
-                body = stecpy(body, ",\"", end);
-            body = stecpy(body, c->rig_id, end);
-            body = stecpy(body, "\"", end);
-        }
-    }
-bail:
-    pthread_rwlock_unlock(&rwlock_acc);
-}
-
-uint64_t
 account_balance(const char *address)
 {
     int rc = 0;
@@ -797,6 +749,54 @@ cleanup:
     if (txn)
         mdb_txn_abort(txn);
     return balance;
+}
+
+uint64_t
+worker_count(const char *address)
+{
+    account_t *account = NULL;
+    uint64_t wc = 0;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+    wc = (uint64_t)account->worker_count;
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
+    return wc;
+}
+
+void
+worker_list(char *list_start, char *list_end, const char *address)
+{
+    char *body = list_start;
+    char *end = list_end;
+    account_t *account = NULL;
+
+    if (strlen(address) > ADDRESS_MAX)
+        return;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+
+    client_t *c = (client_t*)gbag_first(bag_clients);
+    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-4))
+    {
+        if (strncmp(c->address, address, ADDRESS_MAX) == 0)
+        {
+            if(body == list_start)
+            {
+                body = stecpy(body, "\"", end);
+            }
+            else
+                body = stecpy(body, ",\"", end);
+            body = stecpy(body, c->rig_id, end);
+            body = stecpy(body, "\"", end);
+        }
+    }
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
 }
 
 static int
@@ -3036,7 +3036,7 @@ miner_on_login(json_object *message, client_t *client)
         else
         {
             const char *rigstr = json_object_get_string(rig_id);
-            strncpy(client->rig_id, rigstr, MAX_RIG_ID);
+            strncpy(client->rig_id, rigstr, MAX_RIG_ID-1);
             log_trace("Miner set rigid: %s", client->rig_id);
         }
     }
@@ -3256,8 +3256,10 @@ miner_on_submit(json_object *message, client_t *client)
         return;
     }
 
-    log_trace("Miner submitted nonce=%u, result=%s, host=%s:%u, address=%s, rig_id=%s",
-            result_nonce, result_hex, client->host, (unsigned int)client->port, client->address, client->rig_id);
+    log_trace("Miner submitted nonce=%u, result=%s, host=%s:%u, "
+            "address=%s, rig_id=%s",
+            result_nonce, result_hex, client->host, client->port,
+            client->address, client->rig_id);
     /*
       1. Validate submission
          active_job->blocktemplate_blob to bin

@@ -56,13 +56,13 @@ static struct event_base *webui_base;
 static struct evhttp *webui_httpd;
 static struct evhttp_bound_socket *webui_listener;
 
-const char*
+static const char*
 fetch_wa_cookie(struct evhttp_request *req)
 {
-    struct evkeyvalq *hdrs_in = NULL;
-    hdrs_in = evhttp_request_get_input_headers(req);
+    struct evkeyvalq *hdrs_in = evhttp_request_get_input_headers(req);
     const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
     char *wa = NULL;
+
     if (cookies)
     {
         wa = strstr(cookies, "wa=");
@@ -82,11 +82,12 @@ send_json_workers(struct evhttp_request *req, void *arg)
 {
     struct evbuffer *buf = evhttp_request_get_output_buffer(req);
     struct evkeyvalq *hdrs_out = NULL;
-    char rig_list[0x100000] = {0};
-    char *end_pt = rig_list + sizeof(rig_list);
+    char rig_list[0x40000] = {0};
+    char *end = rig_list + sizeof(rig_list);
     const char *wa = fetch_wa_cookie(req);
+
     if (wa)
-        account_rl(rig_list, end_pt, wa);
+        worker_list(rig_list, end, wa);
 
     evbuffer_add_printf(buf, "[%s]", rig_list);
     hdrs_out = evhttp_request_get_output_headers(req);
@@ -113,10 +114,11 @@ send_json_stats(struct evhttp_request *req, void *arg)
     double mb = 0.0;
     uint64_t wc = 0;
     const char *wa = fetch_wa_cookie(req);
+
     if (wa)
     {
         account_hr(mh, wa);
-        wc = account_wc(wa);
+        wc = worker_count(wa);
         uint64_t balance = account_balance(wa);
         mb = (double) balance / 1000000000000.0;
     }
