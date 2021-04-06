@@ -93,6 +93,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MAX_BAD_SHARES 5
 #define MAX_DOWNSTREAM 8
 #define MAX_HOST 256
+#define MAX_RIG_ID 32
 
 #define uint128_t unsigned __int128
 
@@ -219,6 +220,7 @@ typedef struct client_t
     char address[ADDRESS_MAX];
     char worker_id[64];
     char client_id[32];
+    char rig_id[MAX_RIG_ID];
     char agent[256];
     bstack_t *active_jobs;
     uint64_t hashes;
@@ -693,6 +695,54 @@ account_hr(double *avg, const char *address)
     if (!account)
         goto bail;
     memcpy(avg, account->hr_stats.avg, sizeof(account->hr_stats.avg));
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
+}
+
+uint64_t
+account_wc(const char *address)
+{
+    account_t *account = NULL;
+    uint64_t wc = 0;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+    wc = (uint64_t)account->worker_count;
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
+    return wc;
+}
+
+void
+account_rl(char *rig_list_out, char *end_pt, const char *address)
+{
+    char *body = rig_list_out;
+    char *end = end_pt;
+    account_t *account = NULL;
+
+    if (strlen(address) > ADDRESS_MAX)
+        return;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+
+    client_t *c = (client_t*)gbag_first(bag_clients);
+    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-4))
+    {
+        if (strncmp(c->address, address, ADDRESS_MAX) == 0)
+        {
+            if(body == rig_list_out)
+            {
+                body = stecpy(body, "\"", end);
+            }
+            else
+                body = stecpy(body, ",\"", end);
+            body = stecpy(body, c->rig_id, end);
+            body = stecpy(body, "\"", end);
+        }
+    }
 bail:
     pthread_rwlock_unlock(&rwlock_acc);
 }
@@ -2956,6 +3006,8 @@ miner_on_login(json_object *message, client_t *client)
     JSON_GET_OR_ERROR(pass, params, json_type_string, client);
     client->mode = MODE_NORMAL;
     json_object *mode = NULL;
+    json_object *rig_id = NULL;
+
     if (json_object_object_get_ex(params, "mode", &mode))
     {
         if (!json_object_is_type(mode, json_type_string))
@@ -2974,6 +3026,18 @@ miner_on_login(json_object *message, client_t *client)
                 client->mode = MODE_SELF_SELECT;
                 log_trace("Miner login for mode: self-select");
             }
+        }
+    }
+
+    if (json_object_object_get_ex(params, "rigid", &rig_id))
+    {
+        if (!json_object_is_type(rig_id, json_type_string))
+            log_warn("rigid not a json_type_string");
+        else
+        {
+            const char *rigstr = json_object_get_string(rig_id);
+            strncpy(client->rig_id, rigstr, MAX_RIG_ID);
+            log_trace("Miner set rigid: %s", client->rig_id);
         }
     }
 
@@ -3192,8 +3256,8 @@ miner_on_submit(json_object *message, client_t *client)
         return;
     }
 
-    log_trace("Miner submitted nonce=%u, result=%s",
-            result_nonce, result_hex);
+    log_trace("Miner submitted nonce=%u, result=%s, host=%s:%u, address=%s, rig_id=%s",
+            result_nonce, result_hex, client->host, (unsigned int)client->port, client->address, client->rig_id);
     /*
       1. Validate submission
          active_job->blocktemplate_blob to bin
