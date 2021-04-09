@@ -56,13 +56,49 @@ static struct event_base *webui_base;
 static struct evhttp *webui_httpd;
 static struct evhttp_bound_socket *webui_listener;
 
+const char*
+fetch_wa_cookie(struct evhttp_request *req)
+{
+    struct evkeyvalq *hdrs_in = NULL;
+    hdrs_in = evhttp_request_get_input_headers(req);
+    const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
+    char *wa = NULL;
+    if (cookies)
+    {
+        wa = strstr(cookies, "wa=");
+        if (wa)
+        {
+            char *sc = strchr(wa, ';');
+            if (sc)
+                *sc = 0;
+            wa += 3;
+        }
+    }
+    return wa;
+}
+
+static void
+send_json_workers(struct evhttp_request *req, void *arg)
+{
+    struct evbuffer *buf = evhttp_request_get_output_buffer(req);
+    struct evkeyvalq *hdrs_out = NULL;
+    char rig_list[0x100000] = {0};
+    char *end_pt = rig_list + sizeof(rig_list);
+    const char *wa = fetch_wa_cookie(req);
+    if (wa)
+        account_rl(rig_list, end_pt, wa);
+
+    evbuffer_add_printf(buf, "[%s]", rig_list);
+    hdrs_out = evhttp_request_get_output_headers(req);
+    evhttp_add_header(hdrs_out, "Content-Type", "application/json");
+    evhttp_send_reply(req, HTTP_OK, "OK", buf);
+}
 
 static void
 send_json_stats(struct evhttp_request *req, void *arg)
 {
     struct evbuffer *buf = evhttp_request_get_output_buffer(req);
     wui_context_t *context = (wui_context_t*) arg;
-    struct evkeyvalq *hdrs_in = NULL;
     struct evkeyvalq *hdrs_out = NULL;
     uint64_t ph = context->pool_stats->pool_hashrate;
     uint64_t nh = context->pool_stats->network_hashrate;
@@ -75,22 +111,14 @@ send_json_stats(struct evhttp_request *req, void *arg)
     unsigned ss = context->allow_self_select;
     double mh[6] = {0};
     double mb = 0.0;
-
-    hdrs_in = evhttp_request_get_input_headers(req);
-    const char *cookies = evhttp_find_header(hdrs_in, "Cookie");
-    if (cookies)
+    uint64_t wc = 0;
+    const char *wa = fetch_wa_cookie(req);
+    if (wa)
     {
-        char *wa = strstr(cookies, "wa=");
-        if (wa)
-        {
-            char *sc = strchr(wa, ';');
-            if (sc)
-                *sc = 0;
-            wa += 3;
-            account_hr(mh, wa);
-            uint64_t balance = account_balance(wa);
-            mb = (double) balance / 1000000000000.0;
-        }
+        account_hr(mh, wa);
+        wc = account_wc(wa);
+        uint64_t balance = account_balance(wa);
+        mb = (double) balance / 1000000000000.0;
     }
 
     evbuffer_add_printf(buf, "{"
@@ -112,14 +140,15 @@ send_json_stats(struct evhttp_request *req, void *arg)
             "\"miner_hashrate_stats\":["
                     "%"PRIu64",%"PRIu64",%"PRIu64","
                     "%"PRIu64",%"PRIu64",%"PRIu64"],"
-            "\"miner_balance\":%.8f"
+            "\"miner_balance\":%.8f,"
+            "\"worker_count\": %"PRIu64
             "}", ph, rh, nh, nd, height, ltf, lbf, pbf,
             context->payment_threshold, context->pool_fee,
             context->pool_port, context->pool_ssl_port,
             ss, context->pool_stats->connected_accounts,
             (uint64_t)mh[0],
             (uint64_t)mh[0], (uint64_t)mh[1], (uint64_t)mh[2],
-            (uint64_t)mh[3], (uint64_t)mh[4], (uint64_t)mh[5], mb);
+            (uint64_t)mh[3], (uint64_t)mh[4], (uint64_t)mh[5], mb, wc);
     hdrs_out = evhttp_request_get_output_headers(req);
     evhttp_add_header(hdrs_out, "Content-Type", "application/json");
     evhttp_send_reply(req, HTTP_OK, "OK", buf);
@@ -135,6 +164,12 @@ process_request(struct evhttp_request *req, void *arg)
     if (strstr(url, "/stats") != NULL)
     {
         send_json_stats(req, arg);
+        return;
+    }
+
+    if (strstr(url, "/workers") != NULL)
+    {
+        send_json_workers(req, arg);
         return;
     }
 
