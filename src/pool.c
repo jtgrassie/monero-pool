@@ -96,6 +96,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MAX_RIG_ID 32
 
 #define uint128_t unsigned __int128
+#ifndef MIN
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+#endif
 
 /*
   A block is initially locked.
@@ -156,6 +160,7 @@ typedef struct config_t
     char pool_fee_wallet[ADDRESS_MAX];
     uint64_t pool_start_diff;
     uint64_t pool_fixed_diff;
+    uint64_t pool_nicehash_diff;
     double share_mul;
     uint32_t retarget_time;
     double retarget_ratio;
@@ -227,6 +232,7 @@ typedef struct client_t
     hr_stats_t hr_stats;
     time_t connected_since;
     bool is_xnp;
+    bool is_nicehash;
     uint32_t mode;
     uint8_t bad_shares;
     bool downstream;
@@ -1118,22 +1124,24 @@ client_target(client_t *client, job_t *job)
     uint32_t rtt = client->is_xnp ? 5 : config.retarget_time;
     uint64_t bd = 0xFFFFFFFFFFFFFFFF;
     uint64_t sd = config.pool_start_diff;
-    double cd;
+    uint64_t cd;
     double duration;
     unsigned idx = 0;
     uint64_t rt;
 
     if (config.pool_fixed_diff)
         return config.pool_fixed_diff;
+    if (client->is_nicehash)
+        sd = MAX(config.pool_nicehash_diff, sd);
     if (client->req_diff)
-        sd = fmax(client->req_diff, sd);
+        sd = MAX(client->req_diff, sd);
     if (job->block_template)
         bd = job->block_template->difficulty;
     duration = difftime(time(NULL), client->connected_since);
     if (duration > hr_intervals[2])
         idx = 1;
     cd = client->hr_stats.avg[idx] * rtt;
-    rt = fmin(fmax(cd, sd), bd);
+    rt = MIN(MAX(cd, sd), bd);
     return rt;
 }
 
@@ -3075,12 +3083,21 @@ miner_on_login(json_object *message, client_t *client)
         if (user_agent)
         {
             strncpy(client->agent, user_agent, 255);
-            client->is_xnp = strstr(user_agent, "xmr-node-proxy") != NULL
-                ? true : false;
+            if (strstr(user_agent, "NiceHash"))
+            {
+                client->is_nicehash = true;
+                log_trace("Client detected as NiceHash");
+            }
+            else if (strstr(user_agent, "xmr-node-proxy"))
+            {
+                client->is_xnp = true;
+                log_trace("Client detected as xmr-node-proxy");
+            }
         }
     }
 
-    if (client->is_xnp && client->mode == MODE_SELF_SELECT)
+    if ((client->is_nicehash || client->is_xnp)
+            && client->mode == MODE_SELF_SELECT)
     {
         send_validation_error(client,
                 "mode self-select not supported by xmr-node-proxy");
@@ -3828,6 +3845,7 @@ read_config(const char *config_file)
     config.rpc_timeout = 15;
     config.idle_timeout = 150;
     config.pool_start_diff = 1000;
+    config.pool_nicehash_diff = 280000;
     config.share_mul = 2.0;
     config.retarget_time = 30;
     config.retarget_ratio = 0.55;
@@ -3957,6 +3975,10 @@ read_config(const char *config_file)
         else if (strcmp(key, "pool-fixed-diff") == 0)
         {
             config.pool_fixed_diff = strtoumax(val, NULL, 10);
+        }
+        else if (strcmp(key, "pool-nicehash-diff") == 0)
+        {
+            config.pool_nicehash_diff = strtoumax(val, NULL, 10);
         }
         else if (strcmp(key, "pool-fee") == 0)
         {
@@ -4153,6 +4175,7 @@ print_config(void)
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
         "  pool-fixed-diff = %"PRIu64"\n"
+        "  pool-nicehash-diff = %"PRIu64"\n"
         "  pool-fee = %g\n"
         "  payment-threshold = %g\n"
         "  share-mul = %.2f\n"
@@ -4190,6 +4213,7 @@ print_config(void)
         config.pool_fee_wallet,
         config.pool_start_diff,
         config.pool_fixed_diff,
+        config.pool_nicehash_diff,
         config.pool_fee,
         config.payment_threshold,
         config.share_mul,
