@@ -155,7 +155,7 @@ grow:
 void
 gbag_put(gbag_t *gb, void *item)
 {
-    if (gb->e > gb->b && item + gb->z == gb->e)
+    if (gb->e > gb->b && (char*)item + gb->z == gb->e)
         gb->e -= gb->z;
     if (gb->rc)
         gb->rc(item);

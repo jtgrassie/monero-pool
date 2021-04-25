@@ -96,8 +96,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MAX_RIG_ID 32
 
 #define uint128_t unsigned __int128
+
 #ifndef MIN
 #define MIN(a,b) (((a)<(b))?(a):(b))
+#endif
+#ifndef MAX
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
