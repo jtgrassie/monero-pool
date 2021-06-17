@@ -78,6 +78,56 @@ fetch_wa_cookie(struct evhttp_request *req)
 }
 
 static void
+send_json_worker(struct evhttp_request *req, void *arg)
+{
+    struct evbuffer *buf = evhttp_request_get_output_buffer(req);
+    struct evkeyvalq *hdrs_out = NULL;
+    double mh[6] = {0};
+    char rig_id[MAX_RIG_ID] = {0};
+    char wnbuf[128] = {0};
+    char *wn = NULL;
+
+    hdrs_out = evhttp_request_get_output_headers(req);
+    evhttp_add_header(hdrs_out, "Content-Type", "application/json");
+    const char *wa = fetch_wa_cookie(req);
+    if (!wa)
+    {
+        evbuffer_add_printf(buf, "{}");
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", buf);
+        return;
+    }
+    const char *url = evhttp_request_get_uri(req);
+    url += 8;
+    strncpy(wnbuf, url, sizeof(wnbuf)-1);
+    wnbuf[strcspn(wnbuf, "/")] = 0;
+    wn = evhttp_uridecode(wnbuf, 1, NULL);
+    if (!wn)
+    {
+        evbuffer_add_printf(buf, "{}");
+        evhttp_send_reply(req, HTTP_BADREQUEST, "Bad Request", buf);
+        return;
+    }
+    strncpy(rig_id, wn, MAX_RIG_ID-1);
+    free(wn);
+    if (worker_hr(mh, wa, rig_id) == 0)
+    {
+        evbuffer_add_printf(buf, "{"
+                "\"miner_hashrate_stats\":["
+                "%"PRIu64",%"PRIu64",%"PRIu64","
+                "%"PRIu64",%"PRIu64",%"PRIu64"]"
+                "}",
+                (uint64_t)mh[0], (uint64_t)mh[1], (uint64_t)mh[2],
+                (uint64_t)mh[3], (uint64_t)mh[4], (uint64_t)mh[5]);
+        evhttp_send_reply(req, HTTP_OK, "OK", buf);
+    }
+    else
+    {
+        evbuffer_add_printf(buf, "{}");
+        evhttp_send_reply(req, HTTP_NOTFOUND, "Not Found", buf);
+    }
+}
+
+static void
 send_json_workers(struct evhttp_request *req, void *arg)
 {
     struct evbuffer *buf = evhttp_request_get_output_buffer(req);
@@ -163,15 +213,21 @@ process_request(struct evhttp_request *req, void *arg)
     struct evbuffer *buf = NULL;
     struct evkeyvalq *hdrs_out = NULL;
 
-    if (strstr(url, "/stats") != NULL)
+    if (strncmp(url, "/stats", 6) == 0)
     {
         send_json_stats(req, arg);
         return;
     }
 
-    if (strstr(url, "/workers") != NULL)
+    if (strncmp(url, "/workers", 8) == 0)
     {
         send_json_workers(req, arg);
+        return;
+    }
+
+    if (strncmp(url, "/worker/", 8 ) == 0)
+    {
+        send_json_worker(req, arg);
         return;
     }
 

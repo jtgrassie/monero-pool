@@ -68,6 +68,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "forkoff.h"
 #include "growbag.h"
 #include "uthash.h"
+#include "pool.h"
 
 #define MAX_LINE 8192
 #define CLIENTS_INIT 8192
@@ -93,7 +94,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MAX_BAD_SHARES 5
 #define MAX_DOWNSTREAM 8
 #define MAX_HOST 256
-#define MAX_RIG_ID 32
 
 #define uint128_t unsigned __int128
 
@@ -806,6 +806,36 @@ worker_list(char *list_start, char *list_end, const char *address)
     }
 bail:
     pthread_rwlock_unlock(&rwlock_acc);
+}
+
+int
+worker_hr(double *avg, const char *address, const char *rig_id)
+{
+    int rc = 2;
+    account_t *account = NULL;
+    if (!address || !rig_id || !*address || !*rig_id)
+        return rc;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+    {
+        rc = 1;
+        goto bail;
+    }
+    client_t *c = (client_t*)gbag_first(bag_clients);
+    while ((c = gbag_next(bag_clients, 0)))
+    {
+        if (strncmp(c->address, address, ADDRESS_MAX) == 0 &&
+            strncmp(c->rig_id, rig_id, MAX_RIG_ID) == 0)
+        {
+            memcpy(avg, c->hr_stats.avg, sizeof(c->hr_stats.avg));
+            rc = 0;
+            break;
+        }
+    }
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
+    return rc;
 }
 
 static int
