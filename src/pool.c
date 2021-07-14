@@ -790,18 +790,14 @@ worker_list(char *list_start, char *list_end, const char *address)
         goto bail;
 
     client_t *c = (client_t*)gbag_first(bag_clients);
-    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-4))
+    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-24))
     {
         if (strncmp(c->address, address, ADDRESS_MAX) == 0)
         {
-            if(body == list_start)
-            {
-                body = stecpy(body, "\"", end);
-            }
-            else
-                body = stecpy(body, ",\"", end);
-            body = stecpy(body, c->rig_id, end);
-            body = stecpy(body, "\"", end);
+            if (body != list_start)
+                *body++ = ',';
+            body += sprintf(body, "\"%s\",%"PRIu64,
+                    c->rig_id, (uint64_t)(c->hr_stats.avg[1]));
         }
     }
 bail:
