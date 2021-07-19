@@ -1,2 +1,4 @@
 build
-
+tools/local/testenv
+tools/local/.env*
+*.pyc
