@@ -3273,7 +3273,7 @@ miner_on_submit(json_object *message, client_t *client)
     }
 
     log_trace("Miner submitted nonce=%u, result=%s, host=%s:%u, "
-            "address=%s, rig_id=%s",
+            "address=%.12s, rig_id=%s",
             result_nonce, result_hex, client->host, client->port,
             client->address, client->rig_id);
     /*
@@ -3463,7 +3463,13 @@ post_hash:
     if (BN_cmp(hd, bd) >= 0)
     {
         /* Yay! Mined a block so submit to network */
-        log_info("+++ MINED A BLOCK +++");
+        log_info("+++ MINED A BLOCK +++ "
+                 "address=%.12s, round=%"PRIu64", diff=%"PRIu64", "
+                 "height=%"PRIu64,
+                 client->address,
+                 pool_stats.round_hashes + job->target,
+                 pool_stats.network_difficulty,
+                 pool_stats.network_height);
         char *block_hex = calloc((bin_size << 1)+1, sizeof(char));
         bin_to_hex(block, bin_size, block_hex, bin_size << 1);
         char body[RPC_BODY_MAX] = {0};
