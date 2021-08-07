@@ -3211,8 +3211,8 @@ miner_on_block_template(json_object *message, client_t *client)
 
     if (pow_variant >= 6)
     {
-        JSON_GET_OR_WARN(seed_hash, params, json_type_string);
-        JSON_GET_OR_WARN(next_seed_hash, params, json_type_string);
+        JSON_GET_OR_ERROR(seed_hash, params, json_type_string, client);
+        JSON_GET_OR_ERROR(next_seed_hash, params, json_type_string, client);
         strncpy(job->miner_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
         strncpy(job->miner_template->next_seed_hash,
@@ -3314,7 +3314,7 @@ miner_on_submit(json_object *message, client_t *client)
     uint32_t pool_nonce = 0;
     uint32_t worker_nonce = 0;
 
-    if (client->mode != MODE_SELF_SELECT)
+    if (client->mode != MODE_SELF_SELECT && !job->miner_template)
     {
         /* Set the extra nonce and instance_id in our reserved space */
         p += bt->reserved_offset;
@@ -3589,7 +3589,7 @@ miner_on_read(struct bufferevent *bev, void *ctx)
             client_clear(bev);
             goto unlock;
         }
-        JSON_GET_OR_WARN(method, message, json_type_string);
+        JSON_GET_OR_ERROR(method, message, json_type_string, client);
         JSON_GET_OR_WARN(id, message, json_type_int);
         const char *method_name = json_object_get_string(method);
         client->json_id = json_object_get_int(id);
