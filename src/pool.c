@@ -3141,6 +3141,12 @@ miner_on_block_template(json_object *message, client_t *client)
 {
     struct evbuffer *output = bufferevent_get_output(client->bev);
 
+    if (client->mode != MODE_SELF_SELECT)
+    {
+        send_validation_error(client, "Cannot set template; wrong mode");
+        return;
+    }
+
     JSON_GET_OR_ERROR(params, message, json_type_object, client);
     JSON_GET_OR_ERROR(id, params, json_type_string, client);
     JSON_GET_OR_ERROR(job_id, params, json_type_string, client);
