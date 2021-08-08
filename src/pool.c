@@ -3217,12 +3217,13 @@ miner_on_block_template(json_object *message, client_t *client)
 
     if (pow_variant >= 6)
     {
-        JSON_GET_OR_WARN(seed_hash, params, json_type_string);
+        JSON_GET_OR_ERROR(seed_hash, params, json_type_string, client);
         JSON_GET_OR_WARN(next_seed_hash, params, json_type_string);
         strncpy(job->miner_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
-        strncpy(job->miner_template->next_seed_hash,
-                json_object_get_string(next_seed_hash), 64);
+        const char *nsh = json_object_get_string(next_seed_hash);
+        if (nsh)
+            strncpy(job->miner_template->next_seed_hash, nsh, 64);
     }
 
     log_trace("Miner set template: %s", btb);
