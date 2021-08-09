@@ -57,6 +57,7 @@ MONERO_LIBS = \
   ${MONERO_BUILD_ROOT}/src/common/libcommon.a \
   ${MONERO_BUILD_ROOT}/src/ringct/libringct_basic.a \
   ${MONERO_BUILD_ROOT}/src/device/libdevice.a \
+  ${MONERO_BUILD_ROOT}/src/cryptonote_basic/libcryptonote_format_utils_basic.a \
   ${MONERO_BUILD_ROOT}/src/crypto/wallet/libwallet-crypto.a \
   ${MONERO_BUILD_ROOT}/contrib/epee/src/libepee.a \
   ${MONERO_BUILD_ROOT}/external/easylogging++/libeasylogging.a \
