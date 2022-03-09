@@ -259,6 +259,7 @@ typedef struct share_t
     uint64_t height;
     uint64_t difficulty;
     char address[ADDRESS_MAX];
+    char rig_id[MAX_RIG_ID];
     time_t timestamp;
 } share_t;
 
@@ -2622,6 +2623,7 @@ trusted_on_client_share(client_t *client)
     pool_stats.round_hashes += s.difficulty;
     client->hr_stats.diff_since += s.difficulty;
     hr_update(&client->hr_stats);
+    strncpy(s.rig_id, client->rig_id, MAX_RIG_ID-1);
     rc = store_share(s.height, &s);
     if (rc != 0)
         log_warn("Failed to store share: %s", mdb_strerror(rc));
@@ -3525,6 +3527,7 @@ post_hash:
         share_t share = {0,0,{0},0};
         share.height = bt->height;
         share.difficulty = job->target;
+        strncpy(share.rig_id, client->rig_id, MAX_RIG_ID-1);
         strncpy(share.address, client->address, sizeof(share.address)-1);
         share.timestamp = now;
         if (!upstream_event)
