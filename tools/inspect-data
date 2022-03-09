@@ -40,6 +40,7 @@ class share_t(Structure):
     _fields_ = [('height', c_longlong),
                 ('difficulty', c_longlong),
                 ('address', c_char*128),
+		        ('rig_id', c_char*32),
                 ('timestamp', c_longlong)]
 
 class payment_t(Structure):
@@ -74,6 +75,9 @@ def format_address(address):
     return '{}...{}'.format(address[:8], address[-8:])
 
 def address_from_key(key):
+    return key.decode('utf-8').rstrip('\0')
+
+def rig_id_from_key(key):
     return key.decode('utf-8').rstrip('\0')
 
 def print_balance(path):
@@ -128,8 +132,9 @@ def print_shares(path):
                 height = c_longlong.from_buffer_copy(key).value
                 share = share_t.from_buffer_copy(value)
                 address = format_address(address_from_key(share.address))
+                rig_id = rig_id_from_key(share.rig_id)
                 dt = format_timestamp(share.timestamp)
-                print('{}\t{}\t{}'.format(height, address, dt))
+                print('{}\t{}\t{}\t{}'.format(height, address, rig_id, dt))
                 if not curs.prev():
                     break
     env.close()
