@@ -336,13 +336,7 @@ static gbag_t *bag_accounts;
 static gbag_t *bag_clients;
 static bool abattoir;
 
-#ifdef HAVE_RX
-extern void rx_stop_mining();
 extern void rx_slow_hash_free_state();
-#else
-void rx_stop_mining(){}
-void rx_slow_hash_free_state(){}
-#endif
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
@@ -1574,12 +1568,15 @@ response_to_block_template(json_object *result,
 
     if (pow_variant >= 6)
     {
+        unsigned char seed_hash_bin[32] = {0};
         JSON_GET_OR_WARN(seed_hash, result, json_type_string);
         JSON_GET_OR_WARN(next_seed_hash, result, json_type_string);
         strncpy(block_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
         strncpy(block_template->next_seed_hash,
                 json_object_get_string(next_seed_hash), 64);
+        hex_to_bin(block_template->seed_hash, 64, seed_hash_bin, 32);
+        set_rx_main_seedhash(seed_hash_bin);
     }
 }
 
@@ -3417,8 +3414,7 @@ miner_on_submit(json_object *message, client_t *client)
     {
         unsigned char seed_hash[32] = {0};
         hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
-        get_rx_hash(hashing_blob, hashing_blob_size,
-                (unsigned char*)result_hash, seed_hash, bt->height);
+        get_rx_hash(seed_hash, hashing_blob, hashing_blob_size, result_hash);
     }
     else
     {
@@ -4470,7 +4466,6 @@ cleanup(void)
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
-    rx_stop_mining();
     rx_slow_hash_free_state();
     pthread_mutex_destroy(&mutex_clients);
     pthread_mutex_destroy(&mutex_log);
@@ -4614,6 +4609,10 @@ int main(int argc, char **argv)
 
     print_config();
     log_info("Starting pool on: %s:%d", config.pool_listen, config.pool_port);
+
+    if (!getenv("MONERO_RANDOMX_FULL_MEM"))
+        log_info("RandomX dataset (fast mode) is not enabled by default; "
+            "set MONERO_RANDOMX_FULL_MEM environment variable to enable");
 
     if (config.forked)
     {

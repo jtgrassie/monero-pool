@@ -56,9 +56,9 @@ int get_block_hash(const unsigned char *input, const size_t in_size,
         unsigned char *output);
 void get_hash(const unsigned char *input, const size_t in_size,
         unsigned char *output, int variant, uint64_t height);
-void get_rx_hash(const unsigned char *input, const size_t in_size,
-        unsigned char *output, const unsigned char *seed_hash,
-        const uint64_t height);
+void set_rx_main_seedhash(const unsigned char *seed_hash);
+void get_rx_hash(const unsigned char *seed_hash, const unsigned char *input,
+        const size_t in_size, unsigned char *output);
 int validate_block_from_blob(const char *blob_hex,
         const unsigned char *sec_view,
         const unsigned char *pub_spend);
