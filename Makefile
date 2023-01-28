@@ -70,7 +70,7 @@ OS := $(shell uname -s)
 
 CPPDEFS = _GNU_SOURCE AUTO_INITIALIZE_EASYLOGGINGPP LOG_USE_COLOR
 
-W = -W -Wall -Wno-unused-parameter -Wuninitialized
+W = -W -Wall -Wno-unused-parameter -Wuninitialized -Wno-attributes
 OPT = -maes -fPIC
 CFLAGS += $(W) -Wbad-function-cast $(OPT) -std=c99
 CXXFLAGS += $(W) -Wno-reorder $(OPT) -std=c++11

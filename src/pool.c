@@ -189,7 +189,7 @@ typedef struct config_t
     char trusted_allowed[MAX_DOWNSTREAM][MAX_HOST];
     char upstream_host[MAX_HOST];
     uint16_t upstream_port;
-    char pool_view_key[64];
+    char pool_view_key[64] __attribute__ ((nonstring));
     int processes;
     int32_t cull_shares;
     uint32_t template_timeout;
@@ -201,10 +201,10 @@ typedef struct block_template_t
     char *blocktemplate_blob;
     uint64_t difficulty;
     uint64_t height;
-    char prev_hash[64];
+    char prev_hash[64] __attribute__ ((nonstring));
     uint32_t reserved_offset;
-    char seed_hash[64];
-    char next_seed_hash[64];
+    char seed_hash[64] __attribute__ ((nonstring));
+    char next_seed_hash[64] __attribute__ ((nonstring));
 } block_template_t;
 
 typedef struct job_t
@@ -266,8 +266,8 @@ typedef struct share_t
 typedef struct block_t
 {
     uint64_t height;
-    char hash[64];
-    char prev_hash[64];
+    char hash[64] __attribute__ ((nonstring));
+    char prev_hash[64] __attribute__ ((nonstring));
     uint64_t difficulty;
     uint32_t status;
     uint64_t reward;
@@ -3528,7 +3528,7 @@ post_hash:
         share_t share = {0,0,{0},0};
         share.height = bt->height;
         share.difficulty = job->target;
-        strncpy(share.address, client->address, sizeof(share.address)-1);
+        strcpy(share.address, client->address);
         share.timestamp = now;
         if (!upstream_event)
             pool_stats.round_hashes += share.difficulty;
@@ -4131,10 +4131,6 @@ read_config(const char *config_file)
         log_error("Fee wallet cannot match the pool wallet; ignoring");
         memset(config.pool_fee_wallet, 0, sizeof(config.pool_fee_wallet));
     }
-    if (config.template_timeout < config.retarget_time)
-    {
-        log_warn("Block template timeout below job retarget time");
-    }
     if (!config.wallet_rpc_host[0] || config.wallet_rpc_port == 0)
     {
         log_fatal("Both wallet-rpc-host and wallet-rpc-port need setting. "
@@ -4147,6 +4143,10 @@ read_config(const char *config_file)
                 "[0, 1]. Miners will receive new jobs earlier if their latest"
                 " work is less than retarget-ratio percentage of potential.");
         exit(-1);
+    }
+    if (config.template_timeout < config.retarget_time)
+    {
+        log_warn("Block template timeout below job retargeting time");
     }
     if (*config.upstream_host
             && strcmp(config.upstream_host, config.pool_listen) == 0
@@ -4701,7 +4701,7 @@ int main(int argc, char **argv)
 
     wui_context_t uic;
     memset(&uic, 0, sizeof(wui_context_t));
-    strncpy(uic.listen, config.webui_listen, sizeof(uic.listen)-1);
+    strcpy(uic.listen, config.webui_listen);
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
