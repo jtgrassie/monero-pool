@@ -192,6 +192,7 @@ typedef struct config_t
     char pool_view_key[64];
     int processes;
     int32_t cull_shares;
+    uint32_t template_timeout;
 } config_t;
 
 typedef struct block_template_t
@@ -296,9 +297,10 @@ static bstack_t *bsh;
 static struct event_base *pool_base;
 static struct event *listener_event;
 static struct event *timer_30s;
-static struct event *timer_120s;
 static struct event *timer_10m;
+static struct event *timer_template;
 static struct event *signal_usr1;
+static time_t template_triggered;
 static uint32_t extra_nonce;
 static uint32_t instance_id;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
@@ -1995,21 +1997,21 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(block_header, result, json_type_object);
     JSON_GET_OR_WARN(height, block_header, json_type_int);
     uint64_t bh = json_object_get_int64(height);
-    bool need_new_template = false;
+    bool height_changed = false;
     block_t *top = bstack_top(bsh);
     if (top && bh > top->height)
     {
-        need_new_template = true;
+        height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
     }
     else if (!top)
     {
+        height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
         startup_payout(block->height);
         startup_scan_round_shares();
-        need_new_template = true;
     }
 
     top = bstack_top(bsh);
@@ -2018,26 +2020,23 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     pool_stats.network_height = top->height;
     update_pool_hr();
 
-    if (need_new_template)
-    {
-        log_info("Fetching new block template");
-        char body[RPC_BODY_MAX] = {0};
-        uint64_t reserve = 17;
-        rpc_get_request_body(body, "get_block_template", "sssd",
-                "wallet_address", config.pool_wallet, "reserve_size", reserve);
-        rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, 0, 0);
-        rpc_request(pool_base, body, cb1);
+    log_info("Fetching new block template");
+    char body[RPC_BODY_MAX] = {0};
+    uint64_t reserve = 17;
+    rpc_get_request_body(body, "get_block_template", "sssd",
+            "wallet_address", config.pool_wallet, "reserve_size", reserve);
+    rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, 0, 0);
+    rpc_request(pool_base, body, cb1);
 
-        if (top->height >= BLOCK_HEADERS_RANGE + 60 - 1)
-        {
-            uint64_t end = top->height - 60;
-            uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
-            rpc_get_request_body(body, "get_block_headers_range", "sdsd",
-                    "start_height", start, "end_height", end);
-            rpc_callback_t *cb2 = rpc_callback_new(
-                    rpc_on_block_headers_range, 0, 0);
-            rpc_request(pool_base, body, cb2);
-        }
+    if (height_changed && top->height >= BLOCK_HEADERS_RANGE + 60 - 1)
+    {
+        uint64_t end = top->height - 60;
+        uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
+        rpc_get_request_body(body, "get_block_headers_range", "sdsd",
+                "start_height", start, "end_height", end);
+        rpc_callback_t *cb2 = rpc_callback_new(
+                rpc_on_block_headers_range, 0, 0);
+        rpc_request(pool_base, body, cb2);
     }
 
     json_object_put(root);
@@ -2322,6 +2321,7 @@ fetch_last_block_header(void)
 {
     log_info("Fetching last block header");
     char body[RPC_BODY_MAX] = {0};
+    template_triggered = time(NULL);
     rpc_get_request_body(body, "get_last_block_header", NULL);
     rpc_callback_t *cb = rpc_callback_new(rpc_on_last_block_header, 0, 0);
     rpc_request(pool_base, body, cb);
@@ -2808,6 +2808,22 @@ bail:
 }
 
 static void
+timer_on_template(int fd, short kind, void *ctx)
+{
+    struct timeval timeout = {config.template_timeout, 0};
+    time_t now = time(NULL);
+    time_t offset = difftime(now, template_triggered);
+    if (offset < config.template_timeout)
+        timeout.tv_sec -= offset;
+    else
+    {
+        log_trace("Fetching last block header from timer");
+        fetch_last_block_header();
+    }
+    evtimer_add(timer_template, &timeout);
+}
+
+static void
 timer_on_10s(int fd, short kind, void *ctx)
 {
     log_info("Reconnecting to upstream: %s:%d",
@@ -2822,15 +2838,6 @@ timer_on_30s(int fd, short kind, void *ctx)
         upstream_send_ping();
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     evtimer_add(timer_30s, &timeout);
-}
-
-static void
-timer_on_120s(int fd, short kind, void *ctx)
-{
-    log_trace("Fetching last block header from timer");
-    fetch_last_block_header();
-    struct timeval timeout = { .tv_sec = 120, .tv_usec = 0 };
-    evtimer_add(timer_120s, &timeout);
 }
 
 static void
@@ -3852,6 +3859,7 @@ read_config(const char *config_file)
     config.rpc_port = 18081;
     config.rpc_timeout = 15;
     config.idle_timeout = 150;
+    config.template_timeout = 120;
     config.pool_start_diff = 1000;
     config.pool_nicehash_diff = 280000;
     config.share_mul = 2.0;
@@ -3966,6 +3974,11 @@ read_config(const char *config_file)
         else if (strcmp(key, "idle-timeout") == 0)
         {
             config.idle_timeout = atoi(val);
+        }
+        else if (strcmp(key, "template-timeout") == 0)
+        {
+            int v = atoi(val);
+            config.template_timeout = MAX(v, 10);
         }
         else if (strcmp(key, "pool-wallet") == 0)
         {
@@ -4118,6 +4131,10 @@ read_config(const char *config_file)
         log_error("Fee wallet cannot match the pool wallet; ignoring");
         memset(config.pool_fee_wallet, 0, sizeof(config.pool_fee_wallet));
     }
+    if (config.template_timeout < config.retarget_time)
+    {
+        log_warn("Block template timeout below job retarget time");
+    }
     if (!config.wallet_rpc_host[0] || config.wallet_rpc_port == 0)
     {
         log_fatal("Both wallet-rpc-host and wallet-rpc-port need setting. "
@@ -4179,6 +4196,7 @@ print_config(void)
         "  wallet-rpc-port = %u\n"
         "  rpc-timeout = %u\n"
         "  idle-timeout = %u\n"
+        "  template-timeout = %u\n"
         "  pool-wallet = %s\n"
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
@@ -4217,6 +4235,7 @@ print_config(void)
         config.wallet_rpc_port,
         config.rpc_timeout,
         config.idle_timeout,
+        config.template_timeout,
         config.pool_wallet,
         config.pool_fee_wallet,
         config.pool_start_diff,
@@ -4403,13 +4422,9 @@ run(void)
         upstream_connect();
     }
 
-    if (!config.block_notified)
-    {
-        timer_120s = evtimer_new(pool_base, timer_on_120s, NULL);
-        timer_on_120s(-1, EV_TIMEOUT, NULL);
-    }
-    else
-        fetch_last_block_header();
+    timer_template = evtimer_new(pool_base, timer_on_template, NULL);
+    timer_on_template(-1, EV_TIMEOUT, NULL);
+
     fetch_view_key();
 
     if (abattoir)
@@ -4440,10 +4455,10 @@ cleanup(void)
         event_free(timer_10s);
     if (timer_30s)
         event_free(timer_30s);
-    if (timer_120s)
-        event_free(timer_120s);
     if (timer_10m)
         event_free(timer_10m);
+    if (timer_template)
+        event_free(timer_template);
     if (listener_event)
         event_free(listener_event);
     if (trusted_event)
