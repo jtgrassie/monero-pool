@@ -3978,7 +3978,7 @@ read_config(const char *config_file)
         else if (strcmp(key, "template-timeout") == 0)
         {
             int v = atoi(val);
-            config.template_timeout = MAX(v, 10);
+            config.template_timeout = MAX(v, 5);
         }
         else if (strcmp(key, "pool-wallet") == 0)
         {
