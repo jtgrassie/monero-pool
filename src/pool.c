@@ -189,9 +189,10 @@ typedef struct config_t
     char trusted_allowed[MAX_DOWNSTREAM][MAX_HOST];
     char upstream_host[MAX_HOST];
     uint16_t upstream_port;
-    char pool_view_key[64];
+    char pool_view_key[64] __attribute__ ((nonstring));
     int processes;
     int32_t cull_shares;
+    uint32_t template_timeout;
 } config_t;
 
 typedef struct block_template_t
@@ -200,10 +201,10 @@ typedef struct block_template_t
     char *blocktemplate_blob;
     uint64_t difficulty;
     uint64_t height;
-    char prev_hash[64];
+    char prev_hash[64] __attribute__ ((nonstring));
     uint32_t reserved_offset;
-    char seed_hash[64];
-    char next_seed_hash[64];
+    char seed_hash[64] __attribute__ ((nonstring));
+    char next_seed_hash[64] __attribute__ ((nonstring));
 } block_template_t;
 
 typedef struct job_t
@@ -265,8 +266,8 @@ typedef struct share_t
 typedef struct block_t
 {
     uint64_t height;
-    char hash[64];
-    char prev_hash[64];
+    char hash[64] __attribute__ ((nonstring));
+    char prev_hash[64] __attribute__ ((nonstring));
     uint64_t difficulty;
     uint32_t status;
     uint64_t reward;
@@ -296,9 +297,10 @@ static bstack_t *bsh;
 static struct event_base *pool_base;
 static struct event *listener_event;
 static struct event *timer_30s;
-static struct event *timer_120s;
 static struct event *timer_10m;
+static struct event *timer_template;
 static struct event *signal_usr1;
+static time_t template_triggered;
 static uint32_t extra_nonce;
 static uint32_t instance_id;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
@@ -336,13 +338,7 @@ static gbag_t *bag_accounts;
 static gbag_t *bag_clients;
 static bool abattoir;
 
-#ifdef HAVE_RX
-extern void rx_stop_mining();
 extern void rx_slow_hash_free_state();
-#else
-void rx_stop_mining(){}
-void rx_slow_hash_free_state(){}
-#endif
 
 #define JSON_GET_OR_ERROR(name, parent, type, client)                \
     json_object *name = NULL;                                        \
@@ -1574,12 +1570,15 @@ response_to_block_template(json_object *result,
 
     if (pow_variant >= 6)
     {
+        unsigned char seed_hash_bin[32] = {0};
         JSON_GET_OR_WARN(seed_hash, result, json_type_string);
         JSON_GET_OR_WARN(next_seed_hash, result, json_type_string);
         strncpy(block_template->seed_hash,
                 json_object_get_string(seed_hash), 64);
         strncpy(block_template->next_seed_hash,
                 json_object_get_string(next_seed_hash), 64);
+        hex_to_bin(block_template->seed_hash, 64, seed_hash_bin, 32);
+        set_rx_main_seedhash(seed_hash_bin);
     }
 }
 
@@ -1998,21 +1997,21 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     JSON_GET_OR_WARN(block_header, result, json_type_object);
     JSON_GET_OR_WARN(height, block_header, json_type_int);
     uint64_t bh = json_object_get_int64(height);
-    bool need_new_template = false;
+    bool height_changed = false;
     block_t *top = bstack_top(bsh);
     if (top && bh > top->height)
     {
-        need_new_template = true;
+        height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
     }
     else if (!top)
     {
+        height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
         startup_payout(block->height);
         startup_scan_round_shares();
-        need_new_template = true;
     }
 
     top = bstack_top(bsh);
@@ -2021,26 +2020,23 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
     pool_stats.network_height = top->height;
     update_pool_hr();
 
-    if (need_new_template)
-    {
-        log_info("Fetching new block template");
-        char body[RPC_BODY_MAX] = {0};
-        uint64_t reserve = 17;
-        rpc_get_request_body(body, "get_block_template", "sssd",
-                "wallet_address", config.pool_wallet, "reserve_size", reserve);
-        rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, 0, 0);
-        rpc_request(pool_base, body, cb1);
+    log_info("Fetching new block template");
+    char body[RPC_BODY_MAX] = {0};
+    uint64_t reserve = 17;
+    rpc_get_request_body(body, "get_block_template", "sssd",
+            "wallet_address", config.pool_wallet, "reserve_size", reserve);
+    rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, 0, 0);
+    rpc_request(pool_base, body, cb1);
 
-        if (top->height >= BLOCK_HEADERS_RANGE + 60 - 1)
-        {
-            uint64_t end = top->height - 60;
-            uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
-            rpc_get_request_body(body, "get_block_headers_range", "sdsd",
-                    "start_height", start, "end_height", end);
-            rpc_callback_t *cb2 = rpc_callback_new(
-                    rpc_on_block_headers_range, 0, 0);
-            rpc_request(pool_base, body, cb2);
-        }
+    if (height_changed && top->height >= BLOCK_HEADERS_RANGE + 60 - 1)
+    {
+        uint64_t end = top->height - 60;
+        uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
+        rpc_get_request_body(body, "get_block_headers_range", "sdsd",
+                "start_height", start, "end_height", end);
+        rpc_callback_t *cb2 = rpc_callback_new(
+                rpc_on_block_headers_range, 0, 0);
+        rpc_request(pool_base, body, cb2);
     }
 
     json_object_put(root);
@@ -2325,6 +2321,7 @@ fetch_last_block_header(void)
 {
     log_info("Fetching last block header");
     char body[RPC_BODY_MAX] = {0};
+    template_triggered = time(NULL);
     rpc_get_request_body(body, "get_last_block_header", NULL);
     rpc_callback_t *cb = rpc_callback_new(rpc_on_last_block_header, 0, 0);
     rpc_request(pool_base, body, cb);
@@ -2811,6 +2808,22 @@ bail:
 }
 
 static void
+timer_on_template(int fd, short kind, void *ctx)
+{
+    struct timeval timeout = {config.template_timeout, 0};
+    time_t now = time(NULL);
+    time_t offset = difftime(now, template_triggered);
+    if (offset < config.template_timeout)
+        timeout.tv_sec -= offset;
+    else
+    {
+        log_trace("Fetching last block header from timer");
+        fetch_last_block_header();
+    }
+    evtimer_add(timer_template, &timeout);
+}
+
+static void
 timer_on_10s(int fd, short kind, void *ctx)
 {
     log_info("Reconnecting to upstream: %s:%d",
@@ -2825,15 +2838,6 @@ timer_on_30s(int fd, short kind, void *ctx)
         upstream_send_ping();
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     evtimer_add(timer_30s, &timeout);
-}
-
-static void
-timer_on_120s(int fd, short kind, void *ctx)
-{
-    log_trace("Fetching last block header from timer");
-    fetch_last_block_header();
-    struct timeval timeout = { .tv_sec = 120, .tv_usec = 0 };
-    evtimer_add(timer_120s, &timeout);
 }
 
 static void
@@ -3417,8 +3421,7 @@ miner_on_submit(json_object *message, client_t *client)
     {
         unsigned char seed_hash[32] = {0};
         hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
-        get_rx_hash(hashing_blob, hashing_blob_size,
-                (unsigned char*)result_hash, seed_hash, bt->height);
+        get_rx_hash(seed_hash, hashing_blob, hashing_blob_size, result_hash);
     }
     else
     {
@@ -3525,7 +3528,7 @@ post_hash:
         share_t share = {0,0,{0},0};
         share.height = bt->height;
         share.difficulty = job->target;
-        strncpy(share.address, client->address, sizeof(share.address)-1);
+        strcpy(share.address, client->address);
         share.timestamp = now;
         if (!upstream_event)
             pool_stats.round_hashes += share.difficulty;
@@ -3856,6 +3859,7 @@ read_config(const char *config_file)
     config.rpc_port = 18081;
     config.rpc_timeout = 15;
     config.idle_timeout = 150;
+    config.template_timeout = 120;
     config.pool_start_diff = 1000;
     config.pool_nicehash_diff = 280000;
     config.share_mul = 2.0;
@@ -3970,6 +3974,11 @@ read_config(const char *config_file)
         else if (strcmp(key, "idle-timeout") == 0)
         {
             config.idle_timeout = atoi(val);
+        }
+        else if (strcmp(key, "template-timeout") == 0)
+        {
+            int v = atoi(val);
+            config.template_timeout = MAX(v, 5);
         }
         else if (strcmp(key, "pool-wallet") == 0)
         {
@@ -4135,6 +4144,10 @@ read_config(const char *config_file)
                 " work is less than retarget-ratio percentage of potential.");
         exit(-1);
     }
+    if (config.template_timeout < config.retarget_time)
+    {
+        log_warn("Block template timeout below job retargeting time");
+    }
     if (*config.upstream_host
             && strcmp(config.upstream_host, config.pool_listen) == 0
             && config.upstream_port == config.pool_port)
@@ -4183,6 +4196,7 @@ print_config(void)
         "  wallet-rpc-port = %u\n"
         "  rpc-timeout = %u\n"
         "  idle-timeout = %u\n"
+        "  template-timeout = %u\n"
         "  pool-wallet = %s\n"
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
@@ -4221,6 +4235,7 @@ print_config(void)
         config.wallet_rpc_port,
         config.rpc_timeout,
         config.idle_timeout,
+        config.template_timeout,
         config.pool_wallet,
         config.pool_fee_wallet,
         config.pool_start_diff,
@@ -4407,13 +4422,9 @@ run(void)
         upstream_connect();
     }
 
-    if (!config.block_notified)
-    {
-        timer_120s = evtimer_new(pool_base, timer_on_120s, NULL);
-        timer_on_120s(-1, EV_TIMEOUT, NULL);
-    }
-    else
-        fetch_last_block_header();
+    timer_template = evtimer_new(pool_base, timer_on_template, NULL);
+    timer_on_template(-1, EV_TIMEOUT, NULL);
+
     fetch_view_key();
 
     if (abattoir)
@@ -4444,10 +4455,10 @@ cleanup(void)
         event_free(timer_10s);
     if (timer_30s)
         event_free(timer_30s);
-    if (timer_120s)
-        event_free(timer_120s);
     if (timer_10m)
         event_free(timer_10m);
+    if (timer_template)
+        event_free(timer_template);
     if (listener_event)
         event_free(listener_event);
     if (trusted_event)
@@ -4470,7 +4481,6 @@ cleanup(void)
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
-    rx_stop_mining();
     rx_slow_hash_free_state();
     pthread_mutex_destroy(&mutex_clients);
     pthread_mutex_destroy(&mutex_log);
@@ -4615,6 +4625,10 @@ int main(int argc, char **argv)
     print_config();
     log_info("Starting pool on: %s:%d", config.pool_listen, config.pool_port);
 
+    if (!getenv("MONERO_RANDOMX_FULL_MEM"))
+        log_info("RandomX dataset (fast mode) is not enabled by default; "
+            "set MONERO_RANDOMX_FULL_MEM environment variable to enable");
+
     if (config.forked)
     {
         log_info("Daemonizing");
@@ -4687,7 +4701,7 @@ int main(int argc, char **argv)
 
     wui_context_t uic;
     memset(&uic, 0, sizeof(wui_context_t));
-    strncpy(uic.listen, config.webui_listen, sizeof(uic.listen)-1);
+    strcpy(uic.listen, config.webui_listen);
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;

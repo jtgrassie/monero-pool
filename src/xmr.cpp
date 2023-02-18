@@ -146,16 +146,17 @@ void get_hash(const unsigned char *input, const size_t in_size,
             reinterpret_cast<hash&>(*output), variant, height);
 }
 
-void get_rx_hash(const unsigned char *input, const size_t in_size,
-        unsigned char *output, const unsigned char *seed_hash,
-        const uint64_t height)
+void set_rx_main_seedhash(const unsigned char *seed_hash)
 {
-#ifdef HAVE_RX
-    static unsigned miners = tools::get_max_concurrency();
-    uint64_t seed_height = rx_seedheight(height);
-    rx_slow_hash(height, seed_height, (const char*)seed_hash,
-            (const char*)input, in_size, (char*)output, miners, 0);
-#endif
+    static unsigned init_threads = tools::get_max_concurrency();
+    rx_set_main_seedhash((const char*)seed_hash, init_threads);
+}
+
+void get_rx_hash(const unsigned char *seed_hash, const unsigned char *input,
+        const size_t in_size, unsigned char *output)
+{
+    rx_slow_hash((const char*)seed_hash, (const void*)input, in_size,
+            (char*)output);
 }
 
 int validate_block_from_blob(const char *blob_hex,
