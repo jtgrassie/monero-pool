@@ -207,6 +207,7 @@ typedef struct block_template_t
     uint32_t reserved_offset;
     char seed_hash[65];
     char next_seed_hash[65];
+    uint64_t tx_count;
 } block_template_t;
 
 typedef struct job_t
@@ -1507,6 +1508,7 @@ clients_moved(const void *items, size_t count)
 static void
 clients_send_job(void)
 {
+    log_trace("Sending jobs");
     client_t *c = (client_t*) gbag_first(bag_clients);
     while ((c = gbag_next(bag_clients, 0)))
     {
@@ -1574,6 +1576,10 @@ response_to_block_template(json_object *result,
     uint8_t major_version = *block_template->block_blob;
     uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
     log_trace("Variant: %u", pow_variant);
+
+    block_template->tx_count = read_varint((unsigned char*)
+            block_template->hashing_blob+75);
+    log_trace("Transactions: %"PRIu64, block_template->tx_count);
 
     if (pow_variant >= 6)
     {
@@ -1806,12 +1812,14 @@ static void
 rpc_on_block_template(const char* data, rpc_callback_t *callback)
 {
     log_trace("Got block template: \n%s", data);
+    block_template_t cand = {0}, *top = NULL;
     json_object *root = json_tokener_parse(data);
     JSON_GET_OR_WARN(result, root, json_type_object);
     JSON_GET_OR_WARN(status, result, json_type_string);
     const char *ss = json_object_get_string(status);
     json_object *error = NULL;
     json_object_object_get_ex(root, "error", &error);
+
     if (error)
     {
         JSON_GET_OR_WARN(code, error, json_type_object);
@@ -1819,19 +1827,34 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
         int ec = json_object_get_int(code);
         const char *em = json_object_get_string(message);
         log_error("Error (%d) getting block template: %s", ec, em);
-        json_object_put(root);
-        return;
+        goto done;
     }
     if (!status || strcmp(ss, "OK"))
     {
         log_error("Error getting block template: %s", ss);
-        json_object_put(root);
-        return;
+        goto done;
     }
+
     pool_stats.last_template_fetched = time(NULL);
-    block_template_t *top = (block_template_t*) bstack_push(bst, NULL);
-    response_to_block_template(result, top);
+    response_to_block_template(result, &cand);
+
+    if ((top = bstack_top(bst)))
+    {
+        if (cand.tx_count > top->tx_count || cand.height > top->height)
+        {
+            log_trace("Using new template, height: %"PRIu64", txs: %"PRIu64,
+                    cand.height, cand.tx_count);
+            bstack_push(bst, &cand);
+        }
+        else
+            goto done;
+    }
+    else
+        bstack_push(bst, &cand);
+
     clients_send_job();
+
+done:
     json_object_put(root);
 }
 
