@@ -197,8 +197,10 @@ typedef struct config_t
 
 typedef struct block_template_t
 {
-    char *blockhashing_blob;
-    char *blocktemplate_blob;
+    char *hashing_blob;
+    size_t hashing_blob_size;
+    char *block_blob;
+    size_t block_blob_size;
     uint64_t difficulty;
     uint64_t height;
     char prev_hash[65];
@@ -360,6 +362,14 @@ extern void rx_slow_hash_free_state();
             log_warn(#name " not a " #type);                         \
         }                                                            \
     }
+
+#define INPLACE_TO_BIN(field)                                        \
+    do {                                                             \
+        size_t hlen = strlen(field);                                 \
+        size_t blen = hlen>>1;                                       \
+        hex_to_bin(field, hlen, (unsigned char*)field, blen);        \
+        field ## _size = blen;                                       \
+    } while(0)
 
 static void
 hr_update(hr_stats_t *stats)
@@ -1077,10 +1087,11 @@ job_recycle(void *item)
     if (job->miner_template)
     {
         block_template_t *bt = job->miner_template;
-        if (bt->blocktemplate_blob)
+        if (bt->block_blob)
         {
-            free(bt->blocktemplate_blob);
-            bt->blocktemplate_blob = NULL;
+            free(bt->block_blob);
+            bt->block_blob = NULL;
+            bt->block_blob_size = 0;
         }
         free(job->miner_template);
         job->miner_template = NULL;
@@ -1093,15 +1104,17 @@ template_recycle(void *item)
 {
     block_template_t *bt = (block_template_t*) item;
     log_trace("Recycle block template at height: %"PRIu64, bt->height);
-    if (bt->blockhashing_blob)
+    if (bt->hashing_blob)
     {
-        free(bt->blockhashing_blob);
-        bt->blockhashing_blob = NULL;
+        free(bt->hashing_blob);
+        bt->hashing_blob = NULL;
+        bt->hashing_blob_size = 0;
     }
-    if (bt->blocktemplate_blob)
+    if (bt->block_blob)
     {
-        free(bt->blocktemplate_blob);
-        bt->blocktemplate_blob = NULL;
+        free(bt->block_blob);
+        bt->block_blob = NULL;
+        bt->block_blob_size = 0;
     }
 }
 
@@ -1398,17 +1411,15 @@ miner_send_job(client_t *client, bool response)
     }
 
     /*
-      1. Convert blocktemplate_blob to binary
+      1. Copy block_template->block_blob
       2. Update bytes in reserved space at reserved_offset
       3. Get block hashing blob for job
       4. Send
     */
 
-    /* Convert template to blob */
-    size_t hex_size = strlen(bt->blocktemplate_blob);
-    size_t bin_size = hex_size >> 1;
-    unsigned char *block = calloc(bin_size, sizeof(char));
-    hex_to_bin(bt->blocktemplate_blob, hex_size, block, bin_size);
+    /* Copy */
+    unsigned char *block = calloc(bt->block_blob_size, sizeof(char));
+    memcpy(block, bt->block_blob, bt->block_blob_size);
 
     /* Set the extra nonce in our reserved space */
     unsigned char *p = block;
@@ -1424,7 +1435,8 @@ miner_send_job(client_t *client, bool response)
     /* Get hashing blob */
     size_t hashing_blob_size = 0;
     unsigned char *hashing_blob = NULL;
-    get_hashing_blob(block, bin_size, &hashing_blob, &hashing_blob_size);
+    get_hashing_blob(block, bt->block_blob_size, &hashing_blob,
+            &hashing_blob_size);
 
     /* Make hex */
     job->blob = calloc((hashing_blob_size << 1) +1, sizeof(char));
@@ -1449,8 +1461,9 @@ miner_send_job(client_t *client, bool response)
     }
     else
     {
+        size_t hex_size = bt->block_blob_size<<1;
         char *block_hex = calloc(hex_size+1, sizeof(char));
-        bin_to_hex(block, bin_size, block_hex, hex_size);
+        bin_to_hex(block, bt->block_blob_size, block_hex, hex_size);
         stratum_get_proxy_job_body(body, client, block_hex, response);
         free(block_hex);
     }
@@ -1546,17 +1559,19 @@ response_to_block_template(json_object *result,
     JSON_GET_OR_WARN(height, result, json_type_int);
     JSON_GET_OR_WARN(prev_hash, result, json_type_string);
     JSON_GET_OR_WARN(reserved_offset, result, json_type_int);
-    block_template->blockhashing_blob = strdup(
-            json_object_get_string(blockhashing_blob));
-    block_template->blocktemplate_blob = strdup(
-            json_object_get_string(blocktemplate_blob));
+
+    block_template->hashing_blob = strdup(json_object_get_string(
+                blockhashing_blob));
+    INPLACE_TO_BIN(block_template->hashing_blob);
+    block_template->block_blob = strdup(json_object_get_string(
+                blocktemplate_blob));
+    INPLACE_TO_BIN(block_template->block_blob);
     block_template->difficulty = json_object_get_int64(difficulty);
     block_template->height = json_object_get_int64(height);
     strncpy(block_template->prev_hash, json_object_get_string(prev_hash), 64);
     block_template->reserved_offset = json_object_get_int(reserved_offset);
 
-    unsigned int major_version = 0;
-    sscanf(block_template->blocktemplate_blob, "%2x", &major_version);
+    uint8_t major_version = *block_template->block_blob;
     uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
     log_trace("Variant: %u", pow_variant);
 
@@ -3194,14 +3209,14 @@ miner_on_block_template(json_object *message, client_t *client)
     }
 
     job->miner_template = calloc(1, sizeof(block_template_t));
-    job->miner_template->blocktemplate_blob = strdup(btb);
+    job->miner_template->block_blob = strdup(btb);
+    INPLACE_TO_BIN(job->miner_template->block_blob);
     job->miner_template->difficulty = d;
     job->miner_template->height = h;
     strncpy(job->miner_template->prev_hash,
             json_object_get_string(prev_hash), 64);
 
-    unsigned int major_version = 0;
-    sscanf(btb, "%2x", &major_version);
+    uint8_t major_version = *job->miner_template->block_blob;
     uint8_t pow_variant = major_version >= 7 ? major_version - 6 : 0;
     log_trace("Variant: %u", pow_variant);
 
@@ -3275,7 +3290,7 @@ miner_on_submit(json_object *message, client_t *client)
             client->address, client->rig_id);
     /*
       1. Validate submission
-         active_job->blocktemplate_blob to bin
+         active_job->block_template->block_blob copy
          add extra_nonce at reserved offset
          add nonce
          get hashing blob
@@ -3302,10 +3317,8 @@ miner_on_submit(json_object *message, client_t *client)
         bt = job->miner_template;
     else
         bt = job->block_template;
-    char *btb = bt->blocktemplate_blob;
-    size_t bin_size = strlen(btb) >> 1;
-    unsigned char *block = calloc(bin_size, sizeof(char));
-    hex_to_bin(bt->blocktemplate_blob, bin_size << 1, block, bin_size);
+    unsigned char *block = calloc(bt->block_blob_size, sizeof(char));
+    memcpy(block, bt->block_blob, bt->block_blob_size);
 
     unsigned char *p = block;
     uint32_t pool_nonce = 0;
@@ -3375,7 +3388,7 @@ miner_on_submit(json_object *message, client_t *client)
     /* Get hashing blob */
     size_t hashing_blob_size = 0;
     unsigned char *hashing_blob = NULL;
-    if (get_hashing_blob(block, bin_size,
+    if (get_hashing_blob(block, bt->block_blob_size,
                 &hashing_blob, &hashing_blob_size) != 0)
     {
         char body[ERROR_BODY_MAX] = {0};
@@ -3466,8 +3479,9 @@ post_hash:
                  pool_stats.round_hashes + job->target,
                  pool_stats.network_difficulty,
                  pool_stats.network_height);
-        char *block_hex = calloc((bin_size << 1)+1, sizeof(char));
-        bin_to_hex(block, bin_size, block_hex, bin_size << 1);
+        char *block_hex = calloc((bt->block_blob_size << 1)+1, sizeof(char));
+        bin_to_hex(block, bt->block_blob_size, block_hex,
+                bt->block_blob_size << 1);
         char body[RPC_BODY_MAX] = {0};
         snprintf(body, RPC_BODY_MAX,
                 "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":"
@@ -3479,7 +3493,7 @@ post_hash:
         block_t* b = (block_t*) cb->data;
         b->height = bt->height;
         unsigned char block_hash[32] = {0};
-        if (get_block_hash(block, bin_size, block_hash) != 0)
+        if (get_block_hash(block, bt->block_blob_size, block_hash))
             log_error("Error getting block hash!");
         bin_to_hex(block_hash, 32, b->hash, 64);
         strncpy(b->prev_hash, bt->prev_hash, 64);
@@ -3811,7 +3825,7 @@ listener_on_accept(evutil_socket_t listener, short event, void *arg)
     struct timeval tv = {config.idle_timeout, 0};
     if (base != trusted_base)
         bufferevent_set_timeouts(bev, &tv, &tv);
-    bufferevent_setcb(bev, 
+    bufferevent_setcb(bev,
             base == trusted_base ? trusted_on_read : miner_on_read,
             NULL, listener_on_error, arg);
     bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
