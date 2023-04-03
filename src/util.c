@@ -35,6 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <errno.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 #include "util.h"
 
@@ -119,5 +120,23 @@ trim(char *str)
 
     *end = '\0';
     return start;
+}
+
+uint64_t
+read_varint(const unsigned char *b)
+{
+    uint64_t r = 0;
+    unsigned s = 0, c = 7;
+    for(; r |= (uint64_t)(*b & 0x7f)<<s, (*b++ & 0x80) && c--; s+=7);
+    return r;
+}
+
+unsigned char *
+write_varint(unsigned char *b, uint64_t v)
+{
+    unsigned c = 7;
+    for (; *b = v & 0x7f, (v >>= 7) && c--; *b++ |= 0x80);
+    if (v) *b |= 0x80;
+    return ++b;
 }
 

@@ -38,7 +38,9 @@ void hex_to_bin(const char *hex, const size_t hex_len,
 void bin_to_hex(const unsigned char *bin, size_t bin_size, char *hex,
         const size_t hex_size);
 void reverse_bin(unsigned char *bin, const size_t len);
-char *stecpy(char *dst, const char *src, const char *end);
-char *trim(char *str);
+char * stecpy(char *dst, const char *src, const char *end);
+char * trim(char *str);
+uint64_t read_varint(const unsigned char *b);
+unsigned char * write_varint(unsigned char *b, uint64_t v);
 
 #endif
