@@ -989,22 +989,23 @@ process_blocks(block_t *blocks, size_t count)
         MDB_val key = { sizeof(ib->height), (void*)&ib->height };
         MDB_val val;
         MDB_cursor_op op = MDB_SET;
+        int found = 0;
         while (1)
         {
             if ((rc = mdb_cursor_get(cursor, &key, &val, op)))
             {
-                if (rc == MDB_NOTFOUND)
-                    log_trace("No stored block at height: %"PRIu64, ib->height);
-                else
+                if (rc != MDB_NOTFOUND)
                 {
                     err = mdb_strerror(rc);
-                    log_debug("No stored block at height: %"PRIu64
-                            ", with error: %d",
-                            ib->height, err);
+                    log_error("Error fetching block at height: %"PRIu64
+                            ", error: %d", ib->height, err);
                 }
+                else if (!found)
+                    log_trace("No stored block at height: %"PRIu64, ib->height);
                 break;
             }
             op = MDB_NEXT_DUP;
+            found++;
             block_t *sb = (block_t*)val.mv_data;
             if (sb->status != BLOCK_LOCKED)
                 continue;
