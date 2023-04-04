@@ -1848,7 +1848,11 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
             bstack_push(bst, &cand);
         }
         else
+        {
+            free(cand.hashing_blob);
+            free(cand.block_blob);
             goto done;
+        }
     }
     else
         bstack_push(bst, &cand);
