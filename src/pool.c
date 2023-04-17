@@ -2621,7 +2621,8 @@ trusted_on_account_connect(client_t *client)
 static void
 trusted_on_account_disconnect(client_t *client)
 {
-    pool_stats.connected_accounts--;
+    if (pool_stats.connected_accounts)
+        pool_stats.connected_accounts--;
     if (client->downstream_accounts)
         client->downstream_accounts--;
     log_trace("Downstream account disconnected");
@@ -3008,7 +3009,8 @@ client_clear(struct bufferevent *bev)
         return;
     if (client->downstream)
     {
-        pool_stats.connected_accounts -= client->downstream_accounts;
+        if (pool_stats.connected_accounts >= client->downstream_accounts)
+            pool_stats.connected_accounts -= client->downstream_accounts;
         goto clear;
     }
     pthread_rwlock_rdlock(&rwlock_acc);
@@ -3018,8 +3020,10 @@ client_clear(struct bufferevent *bev)
         goto clear;
     if (account->worker_count == 1)
     {
-        account_count--;
-        pool_stats.connected_accounts--;
+        if (account_count)
+            account_count--;
+        if (pool_stats.connected_accounts)
+            pool_stats.connected_accounts--;
         if (upstream_event)
             upstream_send_account_disconnect();
         pthread_rwlock_wrlock(&rwlock_acc);
