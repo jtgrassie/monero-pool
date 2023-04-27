@@ -372,6 +372,22 @@ extern void rx_slow_hash_free_state();
         field ## _size = blen;                                       \
     } while(0)
 
+static inline int
+pdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB_txn **txn)
+{
+    int rc = 0;
+    if ((rc = mdb_txn_begin(env, parent, flags, txn)) == MDB_MAP_RESIZED)
+    {
+        if ((rc = mdb_env_set_mapsize(env, 0)))
+        {
+            log_error("%s", mdb_strerror(rc));
+            return rc;
+        }
+        rc = mdb_txn_begin(env, parent, flags, txn);
+    }
+    return rc;
+}
+
 static void
 hr_update(hr_stats_t *stats)
 {
@@ -557,7 +573,7 @@ database_init(const char* data_dir)
         log_fatal("Cannot resize DB");
         exit(rc);
     }
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_fatal("%s", err);
@@ -637,7 +653,7 @@ store_share(uint64_t height, share_t *share)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -672,7 +688,7 @@ store_block(uint64_t height, block_t *block)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -727,7 +743,7 @@ account_balance(const char *address)
 
     pthread_rwlock_rdlock(&rwlock_tx);
 
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -817,7 +833,7 @@ balance_add(const char *address, uint64_t amount, MDB_txn *parent)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, parent, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, parent, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -881,7 +897,7 @@ payout_block(block_t *block, MDB_txn *parent)
     MDB_cursor *cursor = NULL;
     uint64_t height = block->height;
     uint64_t total_paid = 0;
-    if ((rc = mdb_txn_begin(env, parent, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, parent, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -968,7 +984,7 @@ process_blocks(block_t *blocks, size_t count)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -1874,7 +1890,7 @@ startup_scan_round_shares(void)
     if (*config.upstream_host)
         return 0;
 
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -1924,7 +1940,7 @@ startup_payout(uint64_t height)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2142,7 +2158,7 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     MDB_cursor *cursor = NULL;
 
     /* First, updated balance(s) */
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2207,7 +2223,7 @@ rpc_on_wallet_transferred(const char* data, rpc_callback_t *callback)
     }
 
     /* Now store payment info */
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2256,7 +2272,7 @@ send_payments(void)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_cursor *cursor = NULL;
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2365,7 +2381,7 @@ store_last_height_time(void)
     char *err = NULL;
     MDB_txn *txn = NULL;
     MDB_val k, v;
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2538,7 +2554,7 @@ upstream_send_backlog(void)
         return;
     log_info("Sending upstream shares/blocks since: %"PRIu64", %"PRIu64,
             upstream_last_height, upstream_last_time);
-    if ((rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, MDB_RDONLY, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2703,7 +2719,7 @@ upstream_on_balance(struct bufferevent *bev)
     evbuffer_remove(input, &balance, sizeof(uint64_t));
     evbuffer_remove(input, address, ADDRESS_MAX);
     log_trace("Balance from upstream: %.8s, %"PRIu64, address, balance);
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         err = mdb_strerror(rc);
         log_error("%s", err);
@@ -2892,7 +2908,7 @@ timer_on_10m(int fd, short kind, void *ctx)
     if (config.cull_shares < 1)
         goto done;
     log_debug("Culling shares older than: %d days", config.cull_shares);
-    if ((rc = mdb_txn_begin(env, NULL, 0, &txn)))
+    if ((rc = pdb_txn_begin(env, NULL, 0, &txn)))
     {
         log_error("%s", mdb_strerror(rc));
         goto done;
