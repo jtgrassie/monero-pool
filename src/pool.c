@@ -368,7 +368,7 @@ extern void rx_slow_hash_free_state();
     do {                                                             \
         size_t hlen = strlen(field);                                 \
         size_t blen = hlen>>1;                                       \
-        hex_to_bin(field, hlen, (unsigned char*)field, blen);        \
+        hex_to_bin(field, (unsigned char*)field, blen);              \
         field ## _size = blen;                                       \
     } while(0)
 
@@ -1186,7 +1186,7 @@ target_to_hex(uint64_t target, char *target_hex)
     if (target & 0xFFFFFFFF00000000)
     {
         log_debug("High target requested: %"PRIu64, target);
-        bin_to_hex((const unsigned char*)&target, 8, &target_hex[0], 16);
+        bin_to_hex((const unsigned char*)&target, 8, &target_hex[0]);
         return;
     }
     BIGNUM *diff = BN_new();
@@ -1201,7 +1201,7 @@ target_to_hex(uint64_t target, char *target_hex)
     BN_div(diff, NULL, base_diff, bnt, bn_ctx);
     BN_rshift(diff, diff, 224);
     uint32_t w = BN_get_word(diff);
-    bin_to_hex((const unsigned char*)&w, 4, &target_hex[0], 8);
+    bin_to_hex((const unsigned char*)&w, 4, &target_hex[0]);
     BN_free(bnt);
     BN_free(diff);
 }
@@ -1214,7 +1214,7 @@ stratum_get_proxy_job_body(char *body, const client_t *client,
     const char *client_id = client->client_id;
     const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
-    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id);
     uint64_t target = job->target;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
@@ -1265,7 +1265,7 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
     const char *client_id = client->client_id;
     const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
-    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id);
     uint64_t target = job->target;
     char target_hex[17] = {0};
     target_to_hex(target, &target_hex[0]);
@@ -1281,7 +1281,7 @@ stratum_get_job_body_ss(char *body, const client_t *client, bool response)
     memcpy(extra_bin, &job->extra_nonce, 4);
     memcpy(extra_bin+4, &instance_id, 4);
     char extra_hex[17] = {0};
-    bin_to_hex(extra_bin, 8, extra_hex, 16);
+    bin_to_hex(extra_bin, 8, extra_hex);
 
     if (response)
     {
@@ -1315,7 +1315,7 @@ stratum_get_job_body(char *body, const client_t *client, bool response)
     const char *client_id = client->client_id;
     const job_t *job = bstack_top(client->active_jobs);
     char job_id[33] = {0};
-    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id, 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), job_id);
     const char *blob = job->blob;
     uint64_t target = job->target;
     uint64_t height = job->block_template->height;
@@ -1390,7 +1390,7 @@ client_find_job(client_t *client, const char *job_id)
 {
     uuid_t jid;
     job_t *job = NULL;
-    hex_to_bin(job_id, strlen(job_id), (unsigned char*)&jid, sizeof(uuid_t));
+    hex_to_bin(job_id, (unsigned char*)&jid, sizeof(uuid_t));
     bstack_reset(client->active_jobs);
     while ((job = bstack_next(client->active_jobs)))
     {
@@ -1458,8 +1458,7 @@ miner_send_job(client_t *client, bool response)
 
     /* Make hex */
     job->blob = calloc((hashing_blob_size << 1) +1, sizeof(char));
-    bin_to_hex(hashing_blob, hashing_blob_size, job->blob,
-            hashing_blob_size << 1);
+    bin_to_hex(hashing_blob, hashing_blob_size, job->blob);
     log_trace("Miner hashing blob: %s", job->blob);
 
     /* Save a job id */
@@ -1467,7 +1466,7 @@ miner_send_job(client_t *client, bool response)
 
     /* Send */
     char job_id[33] = {0};
-    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), &job_id[0], 32);
+    bin_to_hex((const unsigned char*)job->id, sizeof(uuid_t), &job_id[0]);
 
     /* Retarget */
     retarget(client, job);
@@ -1481,7 +1480,7 @@ miner_send_job(client_t *client, bool response)
     {
         size_t hex_size = bt->block_blob_size<<1;
         char *block_hex = calloc(hex_size+1, sizeof(char));
-        bin_to_hex(block, bt->block_blob_size, block_hex, hex_size);
+        bin_to_hex(block, bt->block_blob_size, block_hex);
         stratum_get_proxy_job_body(body, client, block_hex, response);
         free(block_hex);
     }
@@ -1607,7 +1606,7 @@ response_to_block_template(json_object *result,
                 json_object_get_string(seed_hash), 64);
         strncpy(block_template->next_seed_hash,
                 json_object_get_string(next_seed_hash), 64);
-        hex_to_bin(block_template->seed_hash, 64, seed_hash_bin, 32);
+        hex_to_bin(block_template->seed_hash, seed_hash_bin, 32);
         set_rx_main_seedhash(seed_hash_bin);
     }
 }
@@ -2014,7 +2013,7 @@ rpc_on_view_key(const char* data, rpc_callback_t *callback)
         return;
     }
     const char *vk = json_object_get_string(key);
-    hex_to_bin(vk, strlen(vk), &sec_view[0], 32);
+    hex_to_bin(vk, &sec_view[0], 32);
     json_object_put(root);
 }
 
@@ -2351,7 +2350,7 @@ fetch_view_key(void)
 {
     if (*config.pool_view_key)
     {
-        hex_to_bin(config.pool_view_key, 64, sec_view, 32);
+        hex_to_bin(config.pool_view_key, sec_view, 32);
         log_info("Using pool view-key: %.4s<hidden>", config.pool_view_key);
         return;
     }
@@ -3184,8 +3183,7 @@ miner_on_login(json_object *message, client_t *client)
 
     uuid_t cid;
     uuid_generate(cid);
-    bin_to_hex((const unsigned char*)cid, sizeof(uuid_t),
-            client->client_id, 32);
+    bin_to_hex((const unsigned char*)cid, sizeof(uuid_t), client->client_id);
     miner_send_job(client, true);
 }
 
@@ -3456,7 +3454,7 @@ miner_on_submit(json_object *message, client_t *client)
     BIGNUM *jd = NULL;
     BIGNUM *bd = NULL;
     BIGNUM *rh = NULL;
-    hex_to_bin(result_hex, 64, submitted_hash, 32);
+    hex_to_bin(result_hex, submitted_hash, 32);
 
     if (config.disable_hash_check)
     {
@@ -3467,7 +3465,7 @@ miner_on_submit(json_object *message, client_t *client)
     if (pow_variant >= 6)
     {
         unsigned char seed_hash[32] = {0};
-        hex_to_bin(bt->seed_hash, 64, seed_hash, 32);
+        hex_to_bin(bt->seed_hash, seed_hash, 32);
         get_rx_hash(seed_hash, hashing_blob, hashing_blob_size, result_hash);
     }
     else
@@ -3528,8 +3526,7 @@ post_hash:
                  pool_stats.network_difficulty,
                  pool_stats.network_height);
         char *block_hex = calloc((bt->block_blob_size << 1)+1, sizeof(char));
-        bin_to_hex(block, bt->block_blob_size, block_hex,
-                bt->block_blob_size << 1);
+        bin_to_hex(block, bt->block_blob_size, block_hex);
         char body[RPC_BODY_MAX] = {0};
         snprintf(body, RPC_BODY_MAX,
                 "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":"
@@ -3543,7 +3540,7 @@ post_hash:
         unsigned char block_hash[32] = {0};
         if (get_block_hash(block, bt->block_blob_size, block_hash))
             log_error("Error getting block hash!");
-        bin_to_hex(block_hash, 32, b->hash, 64);
+        bin_to_hex(block_hash, 32, b->hash);
         strncpy(b->prev_hash, bt->prev_hash, 64);
         b->difficulty = bt->difficulty;
         b->status = BLOCK_LOCKED;

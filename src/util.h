@@ -33,10 +33,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UTIL_H
 
 int is_hex_string(const char *str);
-void hex_to_bin(const char *hex, const size_t hex_len,
-        unsigned char *bin, const size_t bin_size);
-void bin_to_hex(const unsigned char *bin, size_t bin_size, char *hex,
-        const size_t hex_size);
+void hex_to_bin(const char *hex, unsigned char *bin, const size_t bin_size);
+void bin_to_hex(const unsigned char *bin, const size_t bin_size, char *hex);
 void reverse_bin(unsigned char *bin, const size_t len);
 char * stecpy(char *dst, const char *src, const char *end);
 char * trim(char *str);
