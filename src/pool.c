@@ -1,4 +1,4 @@
-/*
+#000000/*
 Copyright (c) 2018, The Monero Project
 
 All rights reserved.
@@ -297,6 +297,7 @@ struct rpc_callback_t
 static config_t config;
 static bstack_t *bst;
 static bstack_t *bsh;
+static bstack_t *bsth;
 static struct event_base *pool_base;
 static struct event *listener_event;
 static struct event *timer_30s;
@@ -2054,12 +2055,19 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
+
+        block_t *block2 = bstack_push(bsth, NULL);
+        response_to_block(block_header, block2);
     }
     else if (!top)
     {
         height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
+        
+        block_t *block2 = bstack_push(bsth, NULL);
+        response_to_block(block_header, block2);
+
         startup_payout(block->height);
         startup_scan_round_shares();
     }
@@ -3191,7 +3199,7 @@ static void
 miner_on_block_template(json_object *message, client_t *client)
 {
     struct evbuffer *output = bufferevent_get_output(client->bev);
-
+    
     if (client->mode != MODE_SELF_SELECT)
     {
         send_validation_error(client, "Cannot set template; wrong mode");
@@ -3213,24 +3221,28 @@ miner_on_block_template(json_object *message, client_t *client)
         return;
     }
 
+    block_template_t *top = bstack_top(bst);
+
     int64_t h = json_object_get_int64(height);
-    int64_t dh = llabs(h - (int64_t)pool_stats.network_height);
-    if (dh > TEMLATE_HEIGHT_VARIANCE)
+
+     if (top->height != h)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Bad height delta: %"PRIu64, dh);
+        snprintf(m, 64, "Bad height, get new template. With a current height : %"PRIu64, top->height);
         send_validation_error(client, m);
         return;
     }
 
     int64_t d = json_object_get_int64(difficulty);
-    if (d < (int64_t)pool_stats.network_difficulty)
+    
+    if (d != top->difficulty)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Low difficulty: %"PRIu64, d);
+        snprintf(m, 64, "Bad difficulty, get new template. With a difficulty : %"PRIu64, top->difficulty);
         send_validation_error(client, m);
         return;
     }
+    
 
     const char *btb = json_object_get_string(blob);
     int rc = 0;
@@ -4523,6 +4535,8 @@ cleanup(void)
         bstack_free(bsh);
     if (bst)
         bstack_free(bst);
+    if (bsth)
+        bstack_free(bsth);
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
@@ -4732,6 +4746,8 @@ int main(int argc, char **argv)
     bstack_new(&bst, BLOCK_TEMPLATES_MAX, sizeof(block_template_t),
             template_recycle);
     bstack_new(&bsh, BLOCK_HEADERS_MAX, sizeof(block_t), NULL);
+    
+    bstack_new(&bsth, BLOCK_HEADERS_MAX, sizeof(block_t), NULL);
 
     bn_ctx = BN_CTX_new();
     base_diff = NULL;
