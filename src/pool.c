@@ -297,7 +297,6 @@ struct rpc_callback_t
 static config_t config;
 static bstack_t *bst;
 static bstack_t *bsh;
-static bstack_t *bsth;
 static struct event_base *pool_base;
 static struct event *listener_event;
 static struct event *timer_30s;
@@ -2055,19 +2054,12 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
-
-        block_t *block2 = bstack_push(bsth, NULL);
-        response_to_block(block_header, block2);
     }
     else if (!top)
     {
         height_changed = true;
         block_t *block = bstack_push(bsh, NULL);
         response_to_block(block_header, block);
-        
-        block_t *block2 = bstack_push(bsth, NULL);
-        response_to_block(block_header, block2);
-
         startup_payout(block->height);
         startup_scan_round_shares();
     }
@@ -4535,8 +4527,6 @@ cleanup(void)
         bstack_free(bsh);
     if (bst)
         bstack_free(bst);
-    if (bsth)
-        bstack_free(bsth);
     database_close();
     BN_free(base_diff);
     BN_CTX_free(bn_ctx);
@@ -4746,8 +4736,6 @@ int main(int argc, char **argv)
     bstack_new(&bst, BLOCK_TEMPLATES_MAX, sizeof(block_template_t),
             template_recycle);
     bstack_new(&bsh, BLOCK_HEADERS_MAX, sizeof(block_t), NULL);
-    
-    bstack_new(&bsth, BLOCK_HEADERS_MAX, sizeof(block_t), NULL);
 
     bn_ctx = BN_CTX_new();
     base_diff = NULL;
