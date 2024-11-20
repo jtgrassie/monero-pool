@@ -3213,21 +3213,24 @@ miner_on_block_template(json_object *message, client_t *client)
         return;
     }
 
+    block_template_t *top = bstack_top(bst);
+
     int64_t h = json_object_get_int64(height);
-    int64_t dh = llabs(h - (int64_t)pool_stats.network_height);
-    if (dh > TEMLATE_HEIGHT_VARIANCE)
+
+    if (top->height != h)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Bad height delta: %"PRIu64, dh);
+        snprintf(m, 64, "Bad height, get new template. With a current height : %"PRIu64, top->height);
         send_validation_error(client, m);
         return;
     }
 
     int64_t d = json_object_get_int64(difficulty);
-    if (d < (int64_t)pool_stats.network_difficulty)
+    
+    if (d != top->difficulty)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Low difficulty: %"PRIu64, d);
+        snprintf(m, 64, "Bad difficulty, get new template. With a difficulty : %"PRIu64, top->difficulty);
         send_validation_error(client, m);
         return;
     }
