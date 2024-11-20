@@ -206,7 +206,7 @@ int validate_block_from_blob(const char *blob_hex,
     if (!find_tx_extra_field_by_type(tx_extra_fields, pub_key_field, 0))
         return XMR_TX_EXTRA_ERROR;
     public_key R = pub_key_field.pub_key;
-    public_key P = boost::get<txout_to_key>(tx.vout[0].target).key;
+    public_key P = boost::get<txout_to_tagged_key>(tx.vout[0].target).key;
     key_derivation derivation;
     generate_key_derivation(R, v, derivation);
     public_key derived;
