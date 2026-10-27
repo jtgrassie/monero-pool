@@ -1403,6 +1403,12 @@ client_find_job(client_t *client, const char *job_id)
 static void
 miner_send_job(client_t *client, bool response)
 {
+    if (!client->address[0])
+    {
+        send_validation_error(client, "Not logged in");
+        return;
+    }
+
     job_t *job = bstack_push(client->active_jobs, NULL);
     block_template_t *bt = bstack_top(bst);
     job->block_template = bt;
@@ -3190,6 +3196,12 @@ miner_on_login(json_object *message, client_t *client)
 static void
 miner_on_block_template(json_object *message, client_t *client)
 {
+    if (!client->address[0])
+    {
+        send_validation_error(client, "Not logged in");
+        return;
+    }
+
     struct evbuffer *output = bufferevent_get_output(client->bev);
 
     if (client->mode != MODE_SELF_SELECT)
@@ -3286,6 +3298,12 @@ miner_on_block_template(json_object *message, client_t *client)
 static void
 miner_on_submit(json_object *message, client_t *client)
 {
+    if (!client->address[0])
+    {
+        send_validation_error(client, "Not logged in");
+        return;
+    }
+
     struct evbuffer *output = bufferevent_get_output(client->bev);
 
     JSON_GET_OR_ERROR(params, message, json_type_object, client);
